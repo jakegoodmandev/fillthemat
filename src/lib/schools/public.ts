@@ -1,0 +1,62 @@
+import { and, eq, isNotNull } from "drizzle-orm";
+import { getDb } from "@/db";
+import {
+  faqs,
+  type School,
+  schools,
+  trialOccurrences,
+  trialOfferings,
+  trialWindows,
+} from "@/db/schema";
+
+export async function getSchoolBySlug(slug: string): Promise<School | null> {
+  const db = getDb();
+  const [school] = await db
+    .select()
+    .from(schools)
+    .where(eq(schools.slug, slug))
+    .limit(1);
+  return school ?? null;
+}
+
+export async function getPublicSchoolBySlug(
+  slug: string,
+): Promise<School | null> {
+  const db = getDb();
+  const [school] = await db
+    .select()
+    .from(schools)
+    .where(
+      and(
+        eq(schools.slug, slug),
+        isNotNull(schools.approvedAt),
+        isNotNull(schools.publishedAt),
+      ),
+    )
+    .limit(1);
+  return school ?? null;
+}
+
+export async function loadSchoolCatalog(schoolId: string) {
+  const db = getDb();
+  const [offeringRows, windowRows, occurrenceRows, faqRows] = await Promise.all(
+    [
+      db
+        .select()
+        .from(trialOfferings)
+        .where(eq(trialOfferings.schoolId, schoolId)),
+      db.select().from(trialWindows).where(eq(trialWindows.schoolId, schoolId)),
+      db
+        .select()
+        .from(trialOccurrences)
+        .where(eq(trialOccurrences.schoolId, schoolId)),
+      db.select().from(faqs).where(eq(faqs.schoolId, schoolId)),
+    ],
+  );
+  return {
+    offerings: offeringRows,
+    windows: windowRows,
+    occurrences: occurrenceRows,
+    faqs: faqRows.sort((a, b) => a.sortOrder - b.sortOrder),
+  };
+}
