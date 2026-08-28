@@ -1,426 +1,751 @@
-# Fillthemat MVP architecture
+# Fillthemat V1 architecture
 
-## Context
+## Product contract
 
-Greenfield repo (`README.md`, `LICENSE`, `.gitignore` only). `.gitignore` already assumes Next.js + Vercel. Build a dogfoodable multi-tenant MVP: a martial-arts school owner signs up, configures one academy, publishes a branded chat landing page, and a prospect books a trial class through that chat. After booking, the prospect gets a confirmation email with a `.ics` calendar file and one reminder email ~24h before class. The owner sees bookings and marks Showed / No-show. Stop there — attendance is a status field only; no post-trial sequences, ads, payments, SMS, Google Calendar OAuth, custom domains, or RAG.
+Fillthemat V1 is a multi-tenant landing-page and trial-booking product for martial-arts schools. A school owner signs in with Google, configures one school, creates age/program-specific trial offerings and recurring windows, previews the result, and explicitly publishes a branded landing page. A prospect can either talk to an AI concierge or use a persistent **Book Trial** action. Both paths end at the same deterministic confirmation form and atomic booking command.
 
-Chosen product mechanics: recurring weekly trial windows with instant book; email + `.ics` + daily reminder cron; Clerk signup + create-school onboarding.
+V1 stops after the pre-class lifecycle: booking, confirmation, one reminder for eligible bookings, owner cancellation, and Showed / No-show. Post-trial conversion sequences, payments, SMS, Google Calendar OAuth, tenant custom domains, waiver e-signing, RAG, staff roles, and ad management are not part of V1.
 
-## Approach
+### Milestones
 
-### 1. Scaffold the Next.js app, then provision Vercel resources
+1. **Founder alpha:** local Supabase, disposable data, `onboarding@resend.dev`, daily manual operational checks, and no external school or prospect traffic. This proves mechanics only.
+2. **Approved pilot:** 3–5 manually approved schools, real prospects, isolated hosted Supabase environments, verified email domain, durable email delivery, abuse controls, migrations, recovery, and production monitoring.
 
-Do not invent a monorepo, next-forge, Eve, or Workflow DevKit. One Next.js App Router app.
+### Pilot product evidence
 
-1. From repo root, non-interactive scaffold into the existing directory (keep `README.md` / `LICENSE`):
+V1 measures absolute landing-page conversion; it does not claim that AI outperforms a conventional landing page.
+
+- At least 200 qualified landing sessions in aggregate.
+- At least 40 qualified sessions per pilot school.
+- At least 10% of qualified sessions produce one or more confirmed participant bookings.
+- A session counts once even when a parent books multiple children.
+- Direct and chat-assisted paths are reported separately.
+- Track no matching offering, no open slot, lead captured, confirmation failure, reminder delivery, Showed, and No-show as secondary outcomes.
+
+A qualified session is a first-party browser session recorded after the public page is visibly hydrated, deduplicated for 30 minutes, with UTM parameters snapshotted at entry. Known bots, owner previews, and synthetic checks are excluded.
+
+## 1. Application and platform foundation
+
+Use one Next.js 16 App Router application. Do not create a monorepo, next-forge workspace, Eve app, Workflow DevKit workflow, or separate API service.
+
+### Scaffold
+
+`create-next-app` refuses the non-empty repository because of `README.md`. Move that file aside, scaffold, then restore the project README. Do not delete `LICENSE`, `.gitignore`, or `docs/`.
 
 ```bash
-npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --turbopack --import-alias "@/*" --use-npm --yes
+mv README.md ../fillthemat.README.md
+bunx create-next-app@latest . \
+  --typescript \
+  --tailwind \
+  --biome \
+  --app \
+  --src-dir \
+  --turbopack \
+  --import-alias "@/*" \
+  --use-bun \
+  --yes
+mv ../fillthemat.README.md README.md
 ```
 
-If the CLI refuses a non-empty directory, pass the flag it prints (often `--force`) rather than deleting README/LICENSE.
+Use Bun for package installation, scripts, local execution, builds, and all non-Edge Vercel Functions. Commit `bun.lock`; do not create `package-lock.json`, `pnpm-lock.yaml`, or `yarn.lock`.
 
-2. Add `"ai"` and `"@ai-sdk/react"` only after scaffold. Do not add `@ai-sdk/openai` / `@ai-sdk/anthropic` or `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`. Models are plain `"provider/model"` strings through AI Gateway.
-
-3. Link and provision **before** `db:push` or `npm run dev`:
-
-```bash
-vercel --version && vercel whoami
-vercel link --yes --scope <team> --project fillthemat
-vercel integration add neon --yes --no-claim
-vercel integration add clerk --yes --no-claim
-vercel integration discover --category messaging
-vercel integration add <top-email-integration> --yes --no-claim
-```
-
-Messaging: prefer **Resend** if it appears in discover results; otherwise take the top email provider from that list. If `add` is connectable (opens a browser), stop and have the user finish claim, then continue. After each integration: `vercel env pull .env.local --yes`.
-
-4. Enable AI Gateway on the linked Vercel project (dashboard → project → AI Gateway). `vercel env pull .env.local --yes` must produce `VERCEL_OIDC_TOKEN`. Do not set `AI_GATEWAY_API_KEY` unless OIDC pull fails.
-
-5. Add any keys integrations did not provision. Names only in `.env.example`; values only via `vercel env add` then re-pull:
-
-```
-DATABASE_URL
-CLERK_SECRET_KEY
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-NEXT_PUBLIC_APP_URL
-RESEND_API_KEY
-RESEND_FROM
-CRON_SECRET
-```
-
-`NEXT_PUBLIC_APP_URL` local = `http://localhost:3000`. `RESEND_FROM` local/onboarding = `Fillthemat <beth.t@example.com>` until a domain is verified. Generate `CRON_SECRET` with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"` piped into `vercel env add CRON_SECRET development preview production` without echoing it.
-
-6. Commit `.env.example` with empty values for those names. Never commit `.env.local`.
-
-If Neon/Clerk Marketplace add fails: provision in the Vercel dashboard, re-pull env, continue. If Resend is unavailable: create a Resend API key, `vercel env add RESEND_API_KEY`, still use the `resend` npm package — do not mock email.
-
-### 2. Database: Neon HTTP + Drizzle, occupancy row for capacity
-
-Install: `drizzle-orm`, `@neondatabase/serverless`, `drizzle-kit`, `dotenv-cli` (dev).
-
-Use **`drizzle-orm/neon-http`** (not WebSocket `Pool`, not Prisma, not a `Proxy` wrapper). Lazy client so `next build` does not throw when `DATABASE_URL` is missing:
-
-`src/db/index.ts` — `getDb()` as in the Vercel storage skill (plain `let _db`, `createDb()` with `neon(process.env.DATABASE_URL!)` + `drizzle(sql, { schema })`).
-
-`drizzle.config.ts`: `schema: "./src/db/schema.ts"`, `dialect: "postgresql"`, `dbCredentials.url: process.env.DATABASE_URL!`.
-
-`package.json` scripts (dotenv required; drizzle-kit does not load `.env.local`):
+`package.json`:
 
 ```json
-"db:push": "dotenv -e .env.local -- drizzle-kit push",
-"db:studio": "dotenv -e .env.local -- drizzle-kit studio"
+{
+  "scripts": {
+    "dev": "bun run --bun next dev",
+    "build": "bun run --bun next build",
+    "check": "biome check .",
+    "check:write": "biome check --write .",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "db:generate": "bunx drizzle-kit generate",
+    "db:migrate": "bunx drizzle-kit migrate",
+    "db:studio": "bunx drizzle-kit studio",
+    "supabase:start": "bunx supabase start",
+    "supabase:stop": "bunx supabase stop"
+  }
+}
 ```
 
-Do not add migration files for MVP; `db:push` is the schema path. If `push` is rejected on a later production branch, then `drizzle-kit generate` + migrate — not now.
+Pin the exact local Bun version in `packageManager`. Vercel runs the managed Bun 1.4 line.
 
-`src/db/schema.ts` — PostgreSQL via `drizzle-orm/pg-core`. All ids `uuid` with `defaultRandom()`. Timestamps `timestamptz` not null default now. Exact tables and columns:
-
-**`users`**
-- `id` uuid pk
-- `clerkUserId` text not null unique
-- `email` text not null
-- `name` text
-- `createdAt` timestamptz
-
-**`schools`** — one school per owner (`ownerUserId` unique)
-- `id` uuid pk
-- `ownerUserId` uuid not null unique → `users.id`
-- `slug` text not null unique
-- `name` text not null
-- `timezone` text not null (IANA, e.g. `America/Los_Angeles`)
-- `phone` text
-- `website` text
-- `addressLine1` text
-- `city` text
-- `region` text
-- `postalCode` text
-- `country` text not null default `'US'`
-- `parkingNotes` text
-- `accessNotes` text
-- `whatToWear` text
-- `arriveEarlyMinutes` integer
-- `waiverNotes` text
-- `whatToExpect` text
-- `membershipsAndPricing` text
-- `agentInstructions` text
-- `welcomeMessage` text
-- `logoUrl` text (URL string only; no Blob upload)
-- `primaryColor` text not null default `'#1d4ed8'`
-- `createdAt`, `updatedAt` timestamptz
-
-**`faqs`**
-- `id` uuid pk
-- `schoolId` uuid not null → `schools.id` on delete cascade
-- `question` text not null
-- `answer` text not null
-- `sortOrder` integer not null default 0
-
-**`trialWindows`** (`trial_windows`)
-- `id` uuid pk
-- `schoolId` uuid not null → `schools.id` on delete cascade
-- `dayOfWeek` integer not null (0 = Sunday … 6 = Saturday, JS `getDay`)
-- `startMinute` integer not null (minutes from local midnight, 0–1439)
-- `durationMinutes` integer not null default 60
-- `capacity` integer not null default 8
-- `label` text not null default `'Intro class'`
-- `active` boolean not null default true
-
-**`trialOccurrences`** (`trial_occurrences`) — dated instance, created lazily on first successful book
-- `id` uuid pk
-- `trialWindowId` uuid not null → `trial_windows.id`
-- `schoolId` uuid not null → `schools.id`
-- `startAt` timestamptz not null
-- `capacity` integer not null
-- `bookedCount` integer not null default 0
-- unique `(trialWindowId, startAt)`
-- check `booked_count >= 0 AND booked_count <= capacity`
-
-**`prospects`**
-- `id` uuid pk
-- `schoolId` uuid not null → `schools.id`
-- `name` text not null
-- `email` text not null
-- `phone` text not null
-- `createdAt` timestamptz
-- index `(schoolId, email)`
-
-**`conversations`**
-- `id` uuid pk
-- `schoolId` uuid not null
-- `prospectId` uuid nullable → `prospects.id`
-- `createdAt` timestamptz
-
-**`messages`**
-- `id` uuid pk
-- `conversationId` uuid not null → `conversations.id` on delete cascade
-- `role` text not null (`user` | `assistant`)
-- `parts` jsonb not null (AI SDK `UIMessage.parts`)
-- `createdAt` timestamptz
-
-**`bookings`**
-- `id` uuid pk
-- `schoolId` uuid not null
-- `prospectId` uuid not null → `prospects.id`
-- `conversationId` uuid nullable
-- `trialOccurrenceId` uuid not null → `trial_occurrences.id`
-- `trialWindowId` uuid not null
-- `startAt` timestamptz not null
-- `endAt` timestamptz not null
-- `status` text not null default `'booked'` — allowed: `booked` | `showed` | `no_show` (no cancel in MVP)
-- `confirmationEmailSentAt` timestamptz nullable
-- `reminderEmailSentAt` timestamptz nullable
-- `icsUid` text not null
-- `createdAt` timestamptz
-- index `(schoolId, startAt)`
-
-No `school_members`, no waitlist, no UTM table. `schoolId` on every tenant row is the expansion seam for staff roles later.
-
-Run `npm run db:push` only after `.env.local` has `DATABASE_URL`.
-
-### 3. Auth: Clerk v7, protect layouts not the public LP
-
-Install `@clerk/nextjs`. Wrap the app with `ClerkProvider` **inside** `<body>` (not wrapping `<html>`). Pages:
-
-- `src/app/sign-in/[[...sign-in]]/page.tsx` — `<SignIn />`
-- `src/app/sign-up/[[...sign-up]]/page.tsx` — `<SignUp />`
-
-Next.js 16: put Clerk session plumbing in `src/proxy.ts` (not `src/middleware.ts` unless the installed Clerk version errors on `proxy.ts`; if it errors, use `src/middleware.ts` with the same `clerkMiddleware` body). Export Clerk’s `clerkMiddleware` as the file’s required export (`proxy` on Next 16). Matcher = Clerk’s default static-file skip. **Do not** `auth.protect()` for `/api(.*)` in this matcher — `/api/chat` and `/api/cron/reminders` are public.
-
-Real gates (defense in depth; proxy is not the sole auth layer):
-
-- `src/app/dashboard/layout.tsx` and `src/app/onboarding/layout.tsx`: `const { userId } = await auth(); if (!userId) await auth.protect()`.
-- Dashboard layout: load school for this Clerk user; if none, `redirect("/onboarding")`.
-- Onboarding page: if school already exists, `redirect("/dashboard")`.
-
-`src/lib/auth/current-user.ts` — `ensureUser()`: `currentUser()` / `auth()`, upsert `users` on `clerkUserId` with email + name, return the row. Call this from onboarding create and dashboard layout.
-
-`src/lib/auth/current-school.ts` — `getOwnedSchool()`: `ensureUser()` then `schools` where `ownerUserId = user.id`. Return `null` if missing.
-
-Public `/s/[slug]` and `/` do not require sign-in.
-
-### 4. Owner onboarding and dashboard
-
-shadcn first, after env works:
+### Dependencies
 
 ```bash
-npx shadcn@latest init -d --base radix
-npx shadcn@latest add button card input label textarea select switch tabs dialog alert-dialog sheet dropdown-menu badge separator skeleton table
+bun add \
+  ai @ai-sdk/react \
+  @supabase/supabase-js @supabase/ssr \
+  drizzle-orm postgres \
+  resend \
+  date-fns date-fns-tz \
+  zod \
+  geist \
+  @marsidev/react-turnstile
+
+bun add -d \
+  @biomejs/biome \
+  @playwright/test \
+  @vercel/config \
+  drizzle-kit \
+  supabase \
+  vitest
 ```
 
-Fix Geist circular font in `globals.css` (`--font-sans: "Geist", ...` literals) and put font variable classes on `<html>`. Default product chrome is **dark** via a `className="dark min-h-svh bg-background text-foreground"` wrapper on dashboard + sign-in + `/`. Do **not** set `dark` on `<html>` — the public LP must stay on `:root` light tokens.
+Do not install direct OpenAI/Anthropic SDKs, Prisma, an ICS package, `dotenv-cli`, ESLint, or Prettier.
 
-Dashboard nav (simple header, not a marketing site): Settings, Bookings, copy-public-link control. `UserButton` from Clerk.
+### Biome and Geist
 
-**`/`** — if signed in, redirect to `/dashboard` or `/onboarding`; if signed out, academy-agnostic stub: product name + Sign in / Sign up.
+The scaffolded `biome.json` is the only lint/format configuration. Enable Biome's React and Next.js domains. There is no ESLint compatibility layer.
 
-**`/onboarding`** — one card form, Server Action `createSchool`:
-- `name` required
-- `slug` required, unique, auto-filled from name via `slugify` (`src/lib/slug.ts`: lowercase, `[a-z0-9]+` joined by hyphens, length 3–48). On unique violation, return field error `That URL is taken`.
-- `timezone` required `<Select>` of `Intl.supportedValuesOf("timeZone")` if available, else a static US IANA list plus `America/New_York`, `America/Chicago`, `America/Denver`, `America/Los_Angeles`, `America/Phoenix`, `Pacific/Honolulu`
-- `city` optional
-Insert `schools` with `ownerUserId`. Redirect `/dashboard/settings`.
+In the root layout:
 
-**`/dashboard`** — school name, public URL `{NEXT_PUBLIC_APP_URL}/s/{slug}` with copy button, counts of upcoming `booked` trials and of windows with `active = true`. If zero active windows, `Alert`: the chat cannot offer times until a window exists.
+```tsx
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
+```
 
-**`/dashboard/settings`** — `Tabs` + `Card` per group, each with its own Server Action (do not one mega-form):
+Put `GeistSans.variable` and `GeistMono.variable` on `<html>`. Use the Geist CSS variables in `globals.css`; do not load Geist through `next/font`.
 
-| Tab | Action | Fields |
-|-----|--------|--------|
-| Profile | `updateSchoolProfile` | name, slug, timezone, phone, website, addressLine1, city, region, postalCode, country, parkingNotes, accessNotes |
-| Trial | `updateSchoolTrialInfo` | whatToWear, arriveEarlyMinutes, waiverNotes, whatToExpect |
-| Pricing | `updateSchoolPricing` | membershipsAndPricing textarea |
-| FAQs | `addFaq` / `deleteFaq` | question, answer; `sortOrder = max+1`; cap 20 rows |
-| Agent | `updateSchoolAgent` | welcomeMessage, agentInstructions |
-| Branding | `updateSchoolBranding` | primaryColor (`<input type="color">`), logoUrl |
-| Schedule | `createTrialWindow` / `updateTrialWindow` / `deleteTrialWindow` | dayOfWeek select Sun–Sat, start time `<input type="time">` stored as `startMinute`, durationMinutes, capacity (1–50), label, active switch |
+### Vercel
 
-Every action re-checks `getOwnedSchool()` and only updates that row. Empty text fields store `null`, not `"unknown"`.
+Link the project after the local application builds:
 
-**`/dashboard/bookings`** — `Table` of this school’s bookings, default filter upcoming (`startAt >= now()`), tabs Upcoming / Past / All. Columns: prospect name, email, phone, local start (`school.timezone`), window label, status `Badge`, actions. For `status === "booked"`, two buttons call `updateBookingAttendance(bookingId, "showed" | "no_show")`. Allow switching showed ↔ no_show. Do not send email on attendance change. No transcript UI (messages table is storage only).
+```bash
+bunx vercel whoami
+bunx vercel link --yes --scope <team> --project fillthemat
+```
 
-### 5. Schedule math and atomic booking
+Enable AI Gateway for the project and pull the environment. OIDC must provide `VERCEL_OIDC_TOKEN`; do not add provider API keys. Provision Resend directly or through the Vercel Marketplace, but Resend is the only supported application email provider.
 
-`src/lib/schedule/constants.ts`:
+`vercel.ts` is the sole Vercel configuration file:
+
+```ts
+import type { VercelConfig } from "@vercel/config/v1";
+
+export const config: VercelConfig = {
+  bunVersion: "1.4.x",
+  buildCommand: "bun run build",
+  framework: "nextjs",
+  crons: [{ path: "/api/cron/maintenance", schedule: "0 14 * * *" }],
+};
+```
+
+The Bun runtime is a Vercel Public Beta dependency. Before pilot traffic, run the complete production-like smoke against a preview deployment. On the pilot's Pro plan, change only the maintenance schedule to `*/5 * * * *`; the database worker remains idempotent, so missed or overlapping invocations are recoverable.
+
+### Environment names
+
+Commit names with empty values in `.env.example`; never commit values or `.env.local`.
+
+```dotenv
+DATABASE_URL=
+DIRECT_URL=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+NEXT_PUBLIC_SITE_URL=
+RESEND_API_KEY=
+RESEND_FROM=
+RESEND_WEBHOOK_SECRET=
+CRON_SECRET=
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=
+TURNSTILE_SECRET_KEY=
+BOOKING_AGENT_MODEL=
+```
+
+Local Supabase Google OAuth additionally reads these from an uncommitted Supabase environment file:
+
+```dotenv
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=
+SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=
+```
+
+Use `NEXT_PUBLIC_SITE_URL` for the stable production hostname. In preview, derive the request origin from trusted Vercel forwarding headers rather than embedding the production URL. Generate `CRON_SECRET` with Bun:
+
+```bash
+bun -e 'console.log(crypto.randomUUID() + crypto.randomUUID())'
+```
+
+Founder alpha uses `RESEND_FROM=onboarding@resend.dev`, which may send only to the Resend account owner's inbox. Before pilot traffic, verify a Fillthemat sending subdomain and change production `RESEND_FROM`.
+
+## 2. Supabase PostgreSQL and Drizzle
+
+Supabase hosts PostgreSQL and Supabase Auth. Drizzle is the sole application-schema migration and query convention.
+
+### Environment topology
+
+- **Local:** `bunx supabase start`; PostgreSQL and Auth run in Docker-compatible containers.
+- **Preview:** isolated hosted Supabase project or preview branch; never production data.
+- **Production:** dedicated hosted Supabase project with backups/PITR configured before pilot.
+
+Install the Supabase CLI as the pinned project dependency above. Commit `supabase/config.toml`. The Supabase CLI owns local platform services and Supabase's internal schemas; it does not own Fillthemat application migrations.
+
+### Connections
+
+- `DATABASE_URL`: Supavisor transaction-mode connection for application traffic.
+- `DIRECT_URL`: direct or session-mode connection for Drizzle migrations and administrative tools.
+- Local development may use the local direct URL for both.
+
+`src/db/index.ts` uses a lazy `postgres` client plus `drizzle-orm/postgres-js`, so importing a module during build does not open a connection:
+
+```ts
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import * as schema from "./schema";
+
+function createDb() {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set");
+  const client = postgres(url, { prepare: false, max: 1 });
+  return drizzle(client, { schema });
+}
+
+let cached: ReturnType<typeof createDb> | undefined;
+
+export function getDb() {
+  return (cached ??= createDb());
+}
+```
+
+`prepare: false` is required by Supavisor transaction mode. `max: 1` bounds per-function connection pressure while Supavisor multiplexes application traffic. Do not connect through the Supabase Data API for application data.
+
+`drizzle.config.ts` points at `src/db/schema.ts`, uses the PostgreSQL dialect, writes migrations to `drizzle/`, and uses `DIRECT_URL ?? DATABASE_URL` for migration commands. The first migration creates `app`:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS app;
+```
+
+All Fillthemat tables live in that schema via `pgSchema("app")`. Do not expose `app` in Supabase's Data API settings; revoke `anon` and `authenticated` privileges on it. Browser code uses Supabase only for Auth. Server Components, Server Actions, and Route Handlers query `app.*` through Drizzle.
+
+### Schema rules
+
+- UUID primary keys.
+- `timestamptz` for instants.
+- IANA timezone strings for local display and recurrence generation.
+- `school_id` on every tenant-owned row.
+- Foreign keys and composite tenant constraints prevent a row from linking entities from different schools.
+- Application queries always include the authenticated/publicly resolved school; PostgreSQL RLS is not used for `app.*`.
+- Database constraints defend invariants; validation is not UI-only.
+
+### Application tables
+
+**`users`**
+
+- `id` uuid primary key; equals the verified Supabase Auth user id.
+- `email` text not null.
+- `name` text nullable.
+- `created_at`, `updated_at` timestamptz.
+- Initial custom migration references `auth.users(id) ON DELETE CASCADE`.
+
+**`schools`**
+
+- `id`, `owner_user_id` (unique), `slug` (unique), `name`, `timezone`.
+- `approved_at`, `published_at` nullable.
+- Notification email, phone, website, address, country, parking/access notes.
+- Trial guidance, pricing, welcome message, bounded owner agent instructions.
+- Validated HTTPS `logo_url`; validated six-digit hex `primary_color`.
+- `created_at`, `updated_at`.
+- Once `published_at` is set, `slug` and `timezone` are immutable in V1.
+
+**`faqs`**
+
+- `id`, `school_id`, `question`, `answer`, `sort_order`, timestamps.
+- At most 20 per school; enforce field-length limits.
+
+**`trial_offerings`**
+
+- `id`, `school_id`, `name`, `description`.
+- `minimum_age`, `maximum_age` nullable with a valid inclusive range.
+- Offering-specific expectations/attire/waiver notes when they differ from the school defaults.
+- `active`, timestamps.
+
+**`trial_windows`**
+
+- `id`, `school_id`, `trial_offering_id`.
+- `day_of_week` (0–6), `start_minute` (0–1439), `duration_minutes`, `capacity`, `label`, `active`.
+- Check constraints: positive duration, capacity 1–50, valid day/minute.
+- A structural change after a future booking requires deactivating the row and creating a replacement. Do not rewrite booked windows.
+
+**`trial_occurrences`**
+
+- `id`, `school_id`, `trial_window_id`, `trial_offering_id`.
+- `start_at`, `end_at`, `capacity`, `booked_count`.
+- Unique `(trial_window_id, start_at)`.
+- Check `0 <= booked_count <= capacity`.
+- Created lazily by the first successful booking.
+
+**`contacts`**
+
+- Adult/contact identity: `id`, `school_id`, normalized `email`, `name`, `phone`, timestamps.
+- Unique `(school_id, email)`.
+
+**`participants`**
+
+- Person occupying a spot: `id`, `school_id`, `contact_id`, `name`, normalized name, timestamps.
+- Unique `(contact_id, normalized_name)` for V1 identity/retry handling.
+- Do not store birthdate; a booking snapshots age in years.
+
+**`landing_sessions`**
+
+- `id`, `school_id`, hashed first-party session key.
+- First/last seen and `qualified_at`.
+- UTM source, medium, campaign, content, and term.
+- `is_preview` and bot-exclusion reason where applicable.
+- Unique `(school_id, session_key_hash)`.
+
+**`conversations`**
+
+- `id`, `school_id`, optional `landing_session_id`, optional `contact_id`.
+- Hashed 256-bit resume token, `expires_at`, timestamps.
+- Resume token is stored raw only in browser `localStorage`, keyed by school slug; only its hash is stored in PostgreSQL.
+
+**`messages`**
+
+- `id`, `conversation_id`, stable client/server message id, role, AI SDK `UIMessage.parts` JSONB, completion state, timestamps, `purge_at`.
+- Unique `(conversation_id, message_id)`.
+- Raw message data expires after 30 days. Booking/contact records do not depend on transcript retention.
+
+**`leads`**
+
+- `id`, `school_id`, `landing_session_id`, `contact_id`, optional participant/offering, stated need, status, timestamps.
+- Created only from an explicit no-match lead form; it does not consume capacity or count as conversion.
+
+**`bookings`**
+
+- `id`, `school_id`, `contact_id`, `participant_id`, `trial_offering_id`, `trial_window_id`, `trial_occurrence_id`.
+- Optional `conversation_id` and `landing_session_id`.
+- Unique server-issued `idempotency_key` within the school.
+- `status`: `booked | showed | no_show | cancelled`.
+- Snapshot participant name/age, offering name, timezone, start/end, location, and instructions needed by later email.
+- Stable `ics_uid`, `ics_sequence`, `cancelled_at`, timestamps.
+- Partial unique index on `(trial_occurrence_id, participant_id)` where status is not `cancelled`.
+
+**`email_deliveries`**
+
+- `id`, `school_id`, optional `booking_id` or `lead_id`.
+- Kind: prospect confirmation, reminder, cancellation, owner booking, owner cancellation, owner lead.
+- Recipient, unique provider idempotency key, state, attempts, provider id, last error, `next_attempt_at`, `sent_at`, timestamps.
+- No raw email body is required after successful delivery.
+
+**`funnel_events`**
+
+- `id`, `school_id`, `landing_session_id`, optional conversation/booking/lead ids.
+- Event type, privacy-safe metadata JSONB, timestamp.
+- No raw message text, email, phone, or participant name.
+
+**`cron_runs`**
+
+- Maintenance run id, start/end, counts, result, and error summary for heartbeat monitoring.
+
+### Migration policy
+
+Founder alpha may use `drizzle-kit push` only against disposable local data. Before any hosted pilot data, generate and commit a baseline migration and use `drizzle-kit migrate`. Never run migrations during application startup. Apply hosted migrations with `DIRECT_URL`, test them against preview first, and complete one Supabase backup restore exercise before pilot launch.
+
+## 3. Supabase Auth with Google OAuth
+
+Use `@supabase/supabase-js` and `@supabase/ssr`. Google OAuth is the only owner sign-in method in V1; owners without a Google account are unsupported.
+
+### Provider configuration
+
+Create one Google Cloud project and separate Web OAuth client credentials for local, preview, and production. Request only `openid`, email, and profile scopes.
+
+- Local Google callback: `http://127.0.0.1:54321/auth/v1/callback`.
+- Hosted callbacks: each Supabase project's Google provider callback URL.
+- Add exact local and production origins.
+- Add the scoped Vercel preview pattern to the Supabase redirect allowlist; production uses an exact redirect.
+- Configure local Google credentials through `supabase/config.toml` using `env(...)`, never literals.
+
+### Next.js integration
+
+Create:
+
+- `src/lib/supabase/browser.ts` using `createBrowserClient`.
+- `src/lib/supabase/server.ts` using `createServerClient` and request cookies.
+- `src/proxy.ts` to refresh the Supabase Auth cookie, propagate all returned cache headers/cookies, and declare the `nodejs` middleware runtime so Vercel executes it on the configured Bun runtime.
+- `src/app/sign-in/page.tsx` with a shadcn **Continue with Google** button.
+- `src/app/auth/callback/route.ts` to validate a relative `next`, exchange the PKCE code, and redirect.
+- `src/app/auth/error/page.tsx`.
+
+Authorization rules:
+
+- Use `supabase.auth.getClaims()` for server authorization.
+- Never trust `getSession()` as proof of identity.
+- Dashboard/onboarding layouts independently require verified claims.
+- `ensureUser()` upserts `app.users` with the Supabase subject UUID, email, and display name.
+- `getOwnedSchool()` loads the one school whose `owner_user_id` equals that application user.
+- Every Server Action repeats authorization and includes `school_id` in its mutation predicate.
+- Public landing/chat/booking/lead routes do not require Supabase Auth.
+
+Manual pilot approval is application state (`schools.approved_at`), not an Auth role. A school cannot publish or send application email until approved. Founder alpha approval may be applied directly in local Supabase Studio; add an internal approval surface only when another operator needs it.
+
+## 4. Owner application and publishing
+
+Install shadcn after the scaffold is healthy:
+
+```bash
+bunx --bun shadcn@latest init -d --base radix
+bunx --bun shadcn@latest add \
+  button card input label textarea select switch tabs \
+  dialog alert-dialog sheet dropdown-menu badge separator skeleton table
+bunx --bun shadcn@latest add https://elements.ai-sdk.dev/api/registry/all.json
+```
+
+Set `dark` on `<html>` so portalled owner components inherit dark tokens. The public `/s/[slug]` layout applies a scoped light theme. Use validated CSS custom properties for the school's accent color.
+
+### Routes
+
+**`/`**
+
+- Signed-out: concise product explanation and Continue with Google.
+- Signed-in without a school: redirect to `/onboarding`.
+- Signed-in with a school: redirect to `/dashboard`.
+
+**`/onboarding`**
+
+- School name, slug, timezone, city, notification email.
+- Slug is lowercase `[a-z0-9]` groups joined by hyphens, length 3–48.
+- Timezone uses `Intl.supportedValuesOf("timeZone")` with a static US fallback.
+- Create an unpublished, unapproved school and redirect to settings.
+
+**`/dashboard`**
+
+- Publication/readiness state and preview action.
+- Qualified sessions, confirmed converted sessions, conversion rate, direct/chat split, leads, upcoming bookings, active offerings/windows.
+- Email delivery failures and last successful maintenance run.
+- Public URL uses the current trusted site origin plus the immutable published slug.
+
+**`/dashboard/settings`**
+
+- Profile: name, pre-publish slug/timezone, phone, website, address, country, parking/access.
+- Offerings: name, description, age range, trial guidance, active.
+- Schedule: offering, weekday, local time, duration, capacity, label, active.
+- Pricing, FAQs, Agent, Branding.
+- Empty optional text persists as null.
+- Every input is length/range/protocol validated server-side.
+
+When a window has a future booking, offering/weekday/start/duration are frozen; deactivate and create a new window. Capacity updates propagate to future occurrences only when the new capacity is at least `booked_count`. Deleting a window is allowed only when no occurrence exists; otherwise deactivate it.
+
+**Publish action**
+
+Requires:
+
+- `approved_at` set.
+- Complete name, slug, timezone, location/contact facts.
+- At least one active offering and one active window.
+- Owner preview completed.
+
+Publishing sets `published_at`; slug and timezone then become immutable. Public `/s/[slug]` returns 404 unless the school is both approved and published.
+
+**`/dashboard/bookings`**
+
+- Upcoming/Past/All filters.
+- Contact and participant, age at booking, offering, local time, status, email delivery state.
+- `booked -> showed | no_show | cancelled`; allow correcting showed/no-show.
+- Cancellation is allowed only for a future `booked` booking and requires confirmation.
+
+**`/dashboard/leads`**
+
+- No-match leads with contact, participant need, source, and created time.
+
+Owner notifications are separate Resend messages, not CCs.
+
+## 5. Public landing page, funnel, and forms
+
+`/s/[slug]` is mobile-first. It renders the school logo using a validated HTTPS `<img>`, school name, offering context, the AI concierge, and a persistent **Book Trial** action. Do not configure a wildcard Next image optimizer host and do not add Blob storage.
+
+On visible hydration, create or refresh a random 30-minute landing-session token in browser storage and call `POST /api/sessions`. The server hashes the token, validates the school, snapshots UTM values, rejects known bots/previews, and creates the qualified-session event exactly once.
+
+### Direct booking flow
+
+1. Select an eligible offering.
+2. Enter participant name and age in years.
+3. Select an open slot.
+4. Enter/edit adult contact name, normalized email, and phone.
+5. Show one final card with school, offering, participant, local date/time, location, and contact details.
+6. Obtain Turnstile verification and submit once to `POST /api/bookings` with a server-issued idempotency key.
+
+The chat path opens the same editable form with its selected offering/slot prefilled. AI-extracted contact text is never silently committed.
+
+### No-match flow
+
+If no offering is eligible or no open slot works, offer an explicit lead form. With consent and Turnstile verification, `POST /api/leads` creates a lead and durable owner-notification delivery. It does not consume capacity or count as a booking conversion.
+
+## 6. Recurrence and atomic booking
+
+Use `date-fns` and `date-fns-tz`; store UTC instants and render with the school's snapshotted IANA timezone.
 
 ```ts
 export const SLOT_HORIZON_DAYS = 14;
 export const MIN_LEAD_MINUTES = 120;
 ```
 
-`src/lib/schedule/occurrences.ts` using `date-fns` + `date-fns-tz` (`fromZonedTime` / `toZonedTime`). Export:
+`listOpenSlots({ school, offering, windows, occurrences, now })` is pure and receives `now` explicitly. It:
 
-- `slotId(windowId: string, startAt: Date): string` → `${windowId}::${startAt.toISOString()}`
-- `parseSlotId(id: string): { windowId: string; startAt: Date } | null` — split on `::`, reject if either half invalid
-- `listOpenSlots(school, windows, occurrences): OpenSlot[]` — for each **active** window, every local calendar date in `[now+MIN_LEAD_MINUTES, now+SLOT_HORIZON_DAYS]` whose weekday matches `dayOfWeek`; build `startAt` as that local date + `startMinute` in `school.timezone` converted to UTC; skip if `startAt` outside the window; `spotsLeft = (occurrence?.bookedCount != null ? occurrence.capacity : window.capacity) - (occurrence?.bookedCount ?? 0)`; omit if `spotsLeft <= 0`. Return `{ slotId, label, startAt, endAt, spotsLeft }`.
+- Uses active windows for one active offering.
+- Generates matching local calendar dates through the horizon.
+- Converts local time to UTC.
+- Skips nonexistent DST local times and uses the earlier offset for a repeated fall-back local time.
+- Uses occurrence capacity when materialized, otherwise window capacity.
+- Omits full slots and returns exact UTC plus formatted local display data.
 
-Do not persist occurrences until a book succeeds.
+`slotId` is opaque to the client but contains only a window id and UTC start. It is not an authorization token. The booking handler parses it, reloads the window by `school_id`, regenerates the open set, and rejects a slot not currently open.
 
-`src/lib/schedule/book-slot.ts` — `bookSlot({ school, slotId, name, email, phone, conversationId })`:
+### `POST /api/bookings`
 
-1. Parse `slotId`. Load window by id **and** `schoolId`. Reject if missing or `active === false`.
-2. Re-run `listOpenSlots` for that window; reject unless `startAt` is in the open list (blocks hallucinated times).
-3. Normalize `email.trim().toLowerCase()`. If a `bookings` row already exists for this school + email + that `startAt` with `status = 'booked'`, return `{ ok: false, code: "already_booked" }`.
-4. Atomic occupancy via raw SQL on `getDb()` (neon-http has no interactive transaction). If `RETURNING` is empty, `{ ok: false, code: "full" }`:
+Validate before the database transaction:
 
-```sql
-INSERT INTO trial_occurrences (id, trial_window_id, school_id, start_at, capacity, booked_count)
-VALUES (${newId}, ${windowId}, ${schoolId}, ${startAt}, ${window.capacity}, 1)
-ON CONFLICT (trial_window_id, start_at)
-DO UPDATE SET booked_count = trial_occurrences.booked_count + 1
-WHERE trial_occurrences.booked_count < trial_occurrences.capacity
-RETURNING id, booked_count
-```
+- Published and approved school.
+- Request/body limits and Vercel WAF policy.
+- Turnstile token.
+- Per-school/IP/recipient quota.
+- Contact and participant schema.
+- Offering age eligibility.
+- Idempotency key and slot shape.
 
-5. Find or insert `prospects` by `(schoolId, lower(email))`; update name/phone if found.
-6. Insert `bookings` with `status: "booked"`, `icsUid: `${bookingId}@fillthemat``, `endAt = startAt + durationMinutes`. Link `conversationId` if present; set `conversations.prospectId`.
-7. If step 6 throws after step 4, `UPDATE trial_occurrences SET booked_count = booked_count - 1 WHERE id = $id AND booked_count > 0`, then rethrow.
-8. Call `sendBookingConfirmation(...)`. If email throws, catch, log, leave booking in place, return `{ ok: true, emailSent: false, booking }`. On email success set `confirmationEmailSentAt` and `{ ok: true, emailSent: true, booking }`.
+Then use one Drizzle/PostgreSQL transaction:
 
-### 6. Email: Resend + hand-rolled ICS
+1. Return the existing booking when `(school_id, idempotency_key)` already exists.
+2. Upsert the normalized contact.
+3. Upsert the participant by contact and normalized name.
+4. Lock/load or create the occurrence from the current window snapshot.
+5. Revalidate lead time, active state, eligibility, and capacity inside the transaction.
+6. Increment `booked_count` only when below capacity.
+7. Insert the booking. The active-booking partial unique index prevents a concurrent duplicate for the same participant/occurrence; any conflict rolls back the increment.
+8. Link the conversation/contact where present.
+9. Insert prospect confirmation and owner booking rows into `email_deliveries` with deterministic keys.
+10. Insert funnel events in the same transaction.
 
-`src/lib/email/ics.ts` — `buildTrialIcs({ uid, startAt, endAt, title, description, location })` returns a `VCALENDAR` string, `METHOD:PUBLISH`, `DTSTART`/`DTEND`/`DTSTAMP` as UTC `YYYYMMDDTHHMMSSZ`. No extra ics library.
+Commit before calling Resend. After commit, attempt the pending deliveries immediately; failures remain pending for maintenance. A retry returns the same booking rather than `already_booked`. For non-idempotent probes, use a generic acknowledgement rather than disclosing whether a third party's email has a booking.
 
-`src/lib/email/resend.ts` — lazy `new Resend(process.env.RESEND_API_KEY!)`. From = `process.env.RESEND_FROM!`.
+### Cancellation
 
-`sendBookingConfirmation` subject: `Your trial class at {school.name}`. Body: formatted local start in `school.timezone`, duration, address lines, parking/access if set, what to wear, arrive-early minutes, school phone. Attach `trial-{slug}.ics` (`contentType: text/calendar`).
+One transaction conditionally changes a future booking from `booked` to `cancelled`, increments `ics_sequence`, decrements its occurrence exactly once, and inserts prospect/owner cancellation deliveries. A repeat returns the existing cancelled state without another decrement or delivery.
 
-`sendBookingReminder` subject: `Reminder: trial class at {school.name} tomorrow`. Shorter body, same ICS attach.
+Attendance corrections do not change occupancy or send email.
 
-Do not CC the owner. Do not implement SMS. Google Calendar API is not used; the `.ics` is how Google/Apple/Outlook ingest the event.
+## 7. Email and calendar delivery
 
-### 7. Chat agent (prospect LP)
+Use the `resend` SDK lazily. Email bodies are plain text in V1; this avoids unsafe tenant-authored HTML. Never include raw transcript content.
 
-After `npm install ai`, read `node_modules/ai/docs` and implement against **installed** AI SDK v6 APIs. Forbidden: `maxSteps`, `parameters:` on tools, `toDataStreamResponse`, `useChat({ api })`, `message.content`, `generateObject`, `Experimental_Agent`, `CoreMessage`. Required: `tool({ inputSchema })`, `stopWhen: stepCountIs(8)`, `toUIMessageStreamResponse()`, `useChat({ transport: new DefaultChatTransport(...) })`, `message.parts`, `convertToModelMessages`.
+Provider idempotency keys:
 
-Model constant in `src/lib/ai/booking-agent.ts`:
+- `booking-confirmation/{bookingId}`
+- `booking-reminder/{bookingId}`
+- `booking-cancellation/{bookingId}/{icsSequence}`
+- `owner-booking/{bookingId}`
+- `owner-cancellation/{bookingId}/{icsSequence}`
+- `owner-lead/{leadId}`
+
+The application database remains the durable source of truth beyond Resend's idempotency retention window.
+
+`buildTrialIcs` is hand-written and vector-tested. It uses CRLF, folds lines at RFC limits, escapes backslash/comma/semicolon/newlines, emits UTC `DTSTART`/`DTEND`/`DTSTAMP`, and uses the stable booking UID. Confirmation/reminder use `METHOD:PUBLISH`. Cancellation reuses UID, increments `SEQUENCE`, adds `STATUS:CANCELLED`, and uses `METHOD:CANCEL`.
+
+Confirmation and reminder include snapshotted offering, local time, location, parking/access, attire, arrive-early guidance, and school contact. Confirmation explains how to contact the school to cancel or reschedule. Reminder subject uses the formatted class date, not the word “tomorrow”.
+
+The maintenance worker claims pending deliveries conditionally, sends with the deterministic key, and records provider id/error/state. Failed attempts receive bounded exponential retry timestamps. Overlapping cron invocations cannot claim the same row concurrently. The Resend webhook route verifies the provider signature with `RESEND_WEBHOOK_SECRET` against a bounded raw request body before updating delivered/bounced/complained state; webhook events never change the booking itself.
+
+A booking created less than 36 hours before its class receives confirmation but no reminder. For older bookings, maintenance creates exactly one reminder delivery when the class enters the reminder window.
+
+No SMS or Google Calendar API is used.
+
+## 8. AI concierge
+
+Install and implement against the pinned AI SDK v7 package's bundled docs/source. Use `ToolLoopAgent`, `createAgentUIStreamResponse`, `isStepCount`, `UIMessage.parts`, `DefaultChatTransport`, and the current Gateway provider interface. Do not copy v6 examples.
 
 ```ts
-export const BOOKING_AGENT_MODEL = "anthropic/claude-sonnet-4.6";
+export const BOOKING_AGENT_MODEL =
+  process.env.BOOKING_AGENT_MODEL || "anthropic/claude-sonnet-4.6";
 ```
 
-If Gateway rejects that id at runtime, switch to `openai/gpt-5.4` (confirmed live on the gateway). Tag calls `providerOptions.gateway.tags: ["feature:booking-chat"]` and `user: school.id`.
+Wrap the model with the Gateway provider so calls carry `tags: ["feature:booking-chat"]` and `user: school.id`. GPT-5.4 is the manually configured fallback, not an automatic hidden switch. Require Gateway/provider Zero Data Retention for pilot traffic.
 
-`createBookingAgent(school, ctx)` returns a `ToolLoopAgent` (or the installed equivalent agent class) with two tools only:
+### Trust boundary
 
-**`list_trial_slots`** — empty input schema. Loads active windows + existing occurrences for `school.id`, returns `listOpenSlots(...)` mapped to JSON `{ slotId, label, startsAtLocal, endsAtLocal, spotsLeft }`. Local strings via `date-fns-tz` in `school.timezone`. If no slots: `{ slots: [], reason: "none_configured" | "none_open" }`.
+The LLM may answer, qualify, list, and prepare. It may not create a booking or lead.
 
-**`book_trial`** — `inputSchema` `{ slotId, name, email, phone }` (zod, email validated, phone min 7 chars). Calls `bookSlot`. Returns the `ok` payload, never a stack trace.
+Read-only/pure tools:
 
-`src/lib/ai/system-prompt.ts` — `buildSystemPrompt(school, faqs)` concatenates only **non-empty** fields. Instructions, verbatim:
+- `list_trial_offerings({ participantAge? })`
+- `list_trial_slots({ offeringId })`
+- `prepare_booking({ offeringId, slotId })` — revalidates and returns data used to open the deterministic form; it performs no write.
 
-- You are the trial-class booking assistant for {name}. Goal: answer honestly from the facts below, then book a trial with `list_trial_slots` + `book_trial`.
-- Never invent class times, prices, policies, or addresses. If a fact is missing, say you do not have it and continue toward booking.
-- Never offer a time that did not come from `list_trial_slots`. Never guess a `slotId`.
-- Collect name, email, and phone before `book_trial`. Confirm the local time in the school timezone before calling the tool.
-- After a successful book, recap time, location, what to wear, and arrive-early guidance. If `emailSent` is false, still confirm the booking and tell them to add the time to their calendar.
-- Do not process payments or sign waivers. You may describe memberships/pricing text if present.
-- English only.
+The platform instruction block is immutable and higher priority than school content. School fields, FAQs, and owner instructions are bounded and delimited as untrusted tenant data. Owner instructions may control tone and approved qualification behavior but cannot override honesty, privacy, eligibility, slot, payment, waiver, or mutation rules.
 
-Facts block: name, timezone, phone, website, full address, parking, access, trial fields, membershipsAndPricing, FAQ Q/A list, plus `agentInstructions` last as “Owner extra instructions”.
+### Conversation identity and persistence
 
-No RAG. If FAQs later exceed prompt budget, still send all 20; do not add a vector store.
+The browser keeps a random 256-bit resume token in `localStorage`, keyed by school slug. The database stores only its hash. The first request creates a school-bound conversation; later requests must match it. The token expires with the 30-day transcript policy.
 
-`src/app/api/chat/route.ts` — Node runtime (default, not `edge`). `maxDuration = 60`. POST:
+Configure `DefaultChatTransport.prepareSendMessagesRequest` to send the resume token and exactly one new user message. The server does not trust a client-supplied assistant/tool history. It:
 
-1. Read `x-school-slug` (required) and `x-conversation-id` (optional UUID). 400 if slug missing.
-2. Load school by slug; 404 if missing. Load faqs ordered by `sortOrder`.
-3. Upsert conversation: if header id exists and belongs to this school, use it; else insert and use the new id.
-4. Parse AI SDK UI messages from the request body the installed docs specify.
-5. Persist the latest user message (`role`, `parts`).
-6. Stream `agent.stream({ messages })` (or installed equivalent) with `toUIMessageStreamResponse()`. Set response header `x-conversation-id`.
-7. On finish, persist assistant `parts`. Do not block the stream on DB writes if the SDK provides `onFinish` / `after`; if not, await persist after the stream helper allows.
+1. Loads canonical messages for the school-bound conversation.
+2. Rejects duplicate message ids and concurrent active generations.
+3. Validates stored history plus the new user message against the agent tools.
+4. Persists the user message before generation.
+5. Streams with `createAgentUIStreamResponse`.
+6. Persists complete server-generated assistant/tool parts in `onEnd` and records abort/error separately.
+7. Uses stream consumption so disconnects still finalize persistence callbacks.
 
-`src/app/s/[slug]/page.tsx` + `layout.tsx` — no dark wrapper. Header: `logoUrl` via `next/image` if set (add the logo host to `images.remotePatterns` **or** use a plain `<img>` if the host is unknown — prefer `images.remotePatterns` with a wildcard only if Next requires a pattern; otherwise `<img>` for arbitrary owner URLs). Title = school name. Accent = `primaryColor` as `style={{ ["--school-accent" as string]: school.primaryColor }}`. `notFound()` on unknown slug.
+Refresh reloads canonical history for the bearer token. There is no cross-device retrieval, public transcript-sharing endpoint, or owner transcript UI.
 
-Chat client `src/components/booking-chat.tsx` (`"use client"`):
+Hard limits:
 
-- `useChat` + `DefaultChatTransport({ api: "/api/chat", headers: () => ({ "x-school-slug": slug, "x-conversation-id": conversationId }) })`. Keep `conversationId` in `useState`, initialize from `crypto.randomUUID()`, update from response header `x-conversation-id` if the transport exposes it; otherwise keep the client-generated UUID and send it on every request so the server can reuse it.
-- Seed one assistant message from `welcomeMessage` or default `Hi! I can help you book a trial class at {name}. What are you looking for?`
-- Render `message.parts` with AI Elements if `npx shadcn@latest add` from `https://elements.ai-sdk.dev/api/registry` succeeds (Conversation / Message / PromptInput — use current registry names if these 404). If the registry add fails, a minimal parts renderer (text parts only) is acceptable.
-- When a `book_trial` tool part succeeds, show a confirmation card: local time, address, “check your email for a calendar invite”.
+- Request-body byte limit.
+- User-message character limit.
+- Maximum 30 messages per conversation.
+- One active generation per conversation.
+- Maximum output tokens and bounded step count.
+- Per-school daily request/token ceiling plus project Gateway spend ceiling.
+- Successful booking counts come from the database, not conversation text.
 
-Prospects have no accounts.
+Store privacy-safe request metadata: model, latency/TTFT, usage/cost, step count, finish/abort/error, tool name/result code, and booking/lead outcome. Do not capture prompts, output text, contact data, or tool PII in telemetry.
 
-### 8. Reminder cron
+## 9. Maintenance, abuse, and observability
 
-`vercel.ts` (not `vercel.json`; do not create both). `@vercel/config` `crons: [{ path: "/api/cron/reminders", schedule: "0 14 * * *" }]` — once daily 14:00 UTC so Hobby plans can run it.
+`GET /api/cron/maintenance` requires a non-empty `CRON_SECRET` and an exact Bearer match; `Bearer undefined` must never authenticate.
 
-`src/app/api/cron/reminders/route.ts` GET:
+Each run:
 
-- `authorization === Bearer ${process.env.CRON_SECRET}` else 401.
-- Select `bookings` where `status = 'booked'` AND `reminderEmailSentAt IS NULL` AND `startAt > now()` AND `startAt <= now() + interval '36 hours'`.
-- For each, load school + prospect, `sendBookingReminder`, set `reminderEmailSentAt = now()`. Continue on per-row email failure.
-- Return `{ ok: true, sent, failed }`.
+1. Creates a `cron_runs` heartbeat.
+2. Creates due reminder deliveries with unique keys.
+3. Claims and sends due email deliveries.
+4. Purges expired message parts/conversations while retaining aggregate funnel events.
+5. Records sent/failed/purged counts and completion.
 
-This is “about a day before”, not exact 24h. If a later Pro plan wants hourly, change the cron schedule only — query stays correct (`startAt - 24h` already passed via the 36h window). Do not add Workflow `sleep` in MVP.
+Founder alpha checks the run daily. Pilot alerts when no successful maintenance run occurs inside the expected interval or when delivery failures/bounces/complaints are nonzero.
 
-Local invoke: `curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/reminders`.
+Vercel WAF protects `/api/chat`, `/api/bookings`, `/api/leads`, and `/api/sessions`. Turnstile is required for booking and lead confirmation. Application quotas limit successful reservations and outbound recipients independently of resettable conversation ids. Only manually approved schools may publish or send from the platform domain.
 
-### 9. Wiring map (create these files; do not add others unless required by shadcn/Clerk)
+Use Vercel runtime logs, Gateway observability, Supabase database observability, durable delivery state, and structured funnel events. Do not add an APM vendor for V1, and never log raw PII or chat text.
 
-```
+## 10. File map
+
+```text
 src/proxy.ts
-src/db/schema.ts
 src/db/index.ts
-src/lib/slug.ts
+src/db/schema.ts
+src/db/migrate.ts
+src/lib/supabase/browser.ts
+src/lib/supabase/server.ts
 src/lib/auth/current-user.ts
 src/lib/auth/current-school.ts
+src/lib/site-url.ts
+src/lib/slug.ts
 src/lib/schedule/constants.ts
 src/lib/schedule/occurrences.ts
 src/lib/schedule/book-slot.ts
 src/lib/email/ics.ts
 src/lib/email/resend.ts
+src/lib/email/deliveries.ts
 src/lib/ai/system-prompt.ts
 src/lib/ai/booking-agent.ts
-src/app/api/chat/route.ts
-src/app/api/cron/reminders/route.ts
-src/app/s/[slug]/page.tsx
-src/components/booking-chat.tsx
+src/lib/security/turnstile.ts
+src/lib/security/limits.ts
+src/app/sign-in/page.tsx
+src/app/auth/callback/route.ts
+src/app/auth/error/page.tsx
 src/app/onboarding/page.tsx
 src/app/dashboard/page.tsx
 src/app/dashboard/settings/page.tsx
 src/app/dashboard/bookings/page.tsx
+src/app/dashboard/leads/page.tsx
+src/app/s/[slug]/page.tsx
+src/app/api/sessions/route.ts
+src/app/api/chat/route.ts
+src/app/api/bookings/route.ts
+src/app/api/leads/route.ts
+src/app/api/webhooks/resend/route.ts
+src/app/api/cron/maintenance/route.ts
+src/components/booking-chat.tsx
+src/components/booking-flow.tsx
+src/components/booking-confirmation-form.tsx
 drizzle.config.ts
 vercel.ts
+biome.json
+supabase/config.toml
 .env.example
 ```
 
-Server Actions live next to the dashboard pages (`actions.ts` in those folders).
+Server Actions live beside authenticated dashboard pages. Public side effects use explicit Route Handlers so WAF targeting, Turnstile, idempotency, and response contracts remain visible.
 
-## Critical files & anchors
+## 11. Verification
 
-- `src/db/schema.ts` — occupancy unique `(trialWindowId, startAt)` and `bookedCount` check; booking capacity depends on this.
-- `src/lib/schedule/book-slot.ts` — `INSERT ... ON CONFLICT ... WHERE booked_count < capacity RETURNING`; compensating decrement on insert failure.
-- `src/lib/ai/booking-agent.ts` — `BOOKING_AGENT_MODEL`, two tools, `stopWhen: stepCountIs(8)`.
-- `src/app/api/chat/route.ts` — school resolved from `x-school-slug` only; never trust a client `schoolId`.
-- `src/proxy.ts` — Clerk session only; must not `protect` `/api/chat` or `/api/cron/reminders`.
+### Static and unit checks
 
-## Verification
+```bash
+bun run check
+bun run test
+bun run build
+```
 
-Prereqs: Vercel link, env pull (OIDC + Clerk + DATABASE_URL + Resend + CRON_SECRET), `npm run db:push`, `npm run dev`. Inbox can receive Resend onboarding-domain mail (or the claimed domain).
+Vitest covers:
 
-Dogfood path (this is the acceptance test; no app-wide suite required):
+- Recurrence with fixed `now`, at least two timezones, DST gap/fold policy, exact UTC instants, lead-time/horizon bounds, and capacity snapshots.
+- ICS escaping, folding, stable UID, sequence, publish, and cancellation output.
+- Slug, site URL, validation, prompt boundaries, and privacy-safe event shaping.
 
-1. Sign up at `/sign-up`, land on `/onboarding`. Create school name `Test Academy`, slug `test-academy`, timezone your real zone.
-2. Settings → Schedule: add **tomorrow’s weekday** at a time 3+ hours from now (or pick the next matching weekday), duration 60, capacity 2, label `Intro class`, active on. Fill parkingNotes `Lot behind the building`, whatToWear `Gi or athletic wear`, arriveEarlyMinutes `15`.
-3. Dashboard copy link. Open `/s/test-academy` in a private window (signed out).
-4. Chat: ask where to park → answer must mention the lot, not invent an address. Ask when you can come in → agent must call `list_trial_slots` and only offer generated times. Give name/email/phone and book the listed slot.
-5. Observable: tool confirmation card; new `bookings` row `status=booked`; `trial_occurrences.booked_count = 1`; confirmation email arrives with an `.ics` that opens to the booked UTC instant; dashboard Bookings shows the prospect.
-6. Book the same slot again with the same email → `{ code: "already_booked" }` / agent says already booked. Fill remaining capacity with a second email, then a third book → `full`.
-7. Set a booking `startAt` ~20h ahead (SQL update or book a matching window) with `reminderEmailSentAt` null; `curl` the cron with `CRON_SECRET` → reminder email and `reminderEmailSentAt` set. Second curl does not send another.
-8. Dashboard: mark Showed, then No-show; status updates; no extra email.
-9. Unknown slug `/s/nope` → 404. `/dashboard` while signed out → Clerk sign-in.
+### Database integration checks
 
-`npm run build` must succeed with env present.
+Run against local Supabase PostgreSQL:
 
-## Assumptions & contingencies
+- Two simultaneous identical booking confirmations produce one booking and one occupied spot.
+- Replaying an idempotency key returns the original booking.
+- The same contact may book two named participants into one occurrence.
+- An ineligible participant cannot book an offering.
+- Full capacity rejects without drift.
+- A simulated transaction error leaves neither booking nor occupancy.
+- Double cancellation decrements and enqueues each cancellation delivery once.
+- Capacity cannot drop below booked count.
+- Structural schedule/timezone/slug mutation guards hold.
+- Cross-school ids cannot be linked, read, attended, or cancelled.
+- Overlapping maintenance runs do not duplicate email claims.
+- The short-lead reminder rule has positive and negative fixtures.
 
-- One owner, one school, English, US-default `country`. Staff/multi-location later attaches to `schoolId`, not a rewrite of tenancy.
-- If Clerk on Next 16 rejects `src/proxy.ts`, use `src/middleware.ts` with the same `clerkMiddleware` and still `auth.protect()` in dashboard/onboarding layouts.
-- If AI Elements registry add fails, ship a text-parts chat UI; do not block booking.
-- If `anthropic/claude-sonnet-4.6` is unauthorized on the project’s gateway, set `BOOKING_AGENT_MODEL` to `openai/gpt-5.4`.
-- If daily cron is too coarse while dogfooding, only change `schedule` in `vercel.ts` to hourly (`0 * * * *`) on Pro; do not add a job queue.
-- Post-trial conversion, no-show workflows, GCal free/busy, SMS, custom domains, RAG over PDFs, paid ads/UTM, and waiver e-sign stay unbuilt; the attach points are `bookings.status`, `src/lib/email/`, `trial_occurrences`, `buildSystemPrompt`, and `/s/[slug]`.
+### Browser checks
+
+Playwright covers public publish visibility, direct booking, chat-assisted form preparation, no-match lead capture, confirmation retries, refresh recovery, and generic duplicate behavior. CI uses local Supabase and deterministic test fixtures; it asserts durable email rows rather than contacting Resend.
+
+The founder alpha smoke additionally exercises real integrations:
+
+1. Start local Supabase and apply Drizzle migrations.
+2. Sign in through Google OAuth and verify callback/cookie refresh.
+3. Create and locally approve one school.
+4. Create adult and child offerings plus active windows; preview and publish.
+5. Open the public page signed out; verify qualified-session creation and UTM snapshot.
+6. Ask a fact question and verify no invented school facts.
+7. Book through chat preparation and the editable confirmation form.
+8. Verify one booking, one occupancy, prospect confirmation delivery, owner delivery, and valid ICS.
+9. Book a sibling through the direct flow into the same occurrence.
+10. Trigger a duplicate/retry and verify the existing booking returns without another spot or email.
+11. Exhaust capacity and verify the no-match lead path.
+12. Cancel once, retry cancellation, verify one reopened spot and one cancellation sequence.
+13. Run maintenance twice and verify no duplicate reminder/delivery.
+14. Mark Showed then No-show and verify no occupancy/email change.
+15. Verify unpublished/unknown slugs 404 and signed-out dashboard access redirects to sign-in.
+
+### Pilot launch gate
+
+Before the first external school:
+
+- Production and preview Supabase projects are isolated and migrated.
+- Google OAuth origins, callbacks, consent branding, and redirect allowlists are exact.
+- Stable site hostname and verified Resend sending domain are live.
+- Bun 1.4 Vercel preview smoke passes AI streaming, OAuth, Supavisor, cron, and webhooks.
+- Vercel WAF and Turnstile are enforced.
+- Gateway ZDR and spend ceiling are verified.
+- Supabase backup/PITR and one restore drill are complete.
+- Maintenance heartbeat and email failure/bounce/complaint alerts are observed.
+- Transcript notice, 30-day purge, deletion/export procedure, and log redaction are verified.
+- A second tenant-isolation smoke passes before inviting the remaining pilot schools.
+
+## Assumptions and non-goals
+
+- One Google-authenticated owner and one school per owner.
+- Three to five manually approved pilot schools.
+- English and US-default country; IANA timezones.
+- Parent/contact and participant are separate; one booking occupies one participant spot.
+- A prospect has no account and no cross-device chat recovery.
+- Immediate anonymous booking remains possible after Turnstile and quotas; residual determined fake-identity risk is accepted for the approved pilot.
+- Public app data is served by Next.js; Supabase Data API, RLS, Realtime, Storage, and Edge Functions are not used for `app.*`.
+- Engagement configurability, post-trial conversion/no-show workflows, waitlists, GCal free/busy, SMS, tenant domains, RAG/PDFs, ad management, payments, and waiver e-sign remain unbuilt.
+- Future attach points are booking status/events, `email_deliveries`, trial offerings/occurrences, the immutable agent boundary, and the public landing route.
