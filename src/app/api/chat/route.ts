@@ -11,7 +11,10 @@ import { conversations, messages } from "@/db/schema";
 import { createBookingAgent } from "@/lib/ai/booking-agent";
 import { hashToken } from "@/lib/crypto";
 import { TRANSCRIPT_RETENTION_DAYS } from "@/lib/schedule/constants";
-import { getPublicSchoolBySlug, loadSchoolCatalog } from "@/lib/schools/public";
+import {
+  getSchoolForLandingAccess,
+  loadSchoolCatalog,
+} from "@/lib/schools/public";
 import {
   MAX_CHAT_MESSAGES_PER_CONVERSATION,
   MAX_USER_MESSAGE_CHARS,
@@ -33,6 +36,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     slug?: string;
     resumeToken?: string;
+    preview?: boolean;
     message?: UIMessage;
   };
   if (
@@ -48,7 +52,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid_message" }, { status: 400 });
   }
 
-  const school = await getPublicSchoolBySlug(body.slug);
+  const school = await getSchoolForLandingAccess(body.slug, {
+    preview: Boolean(body.preview),
+  });
   if (!school) return Response.json({ error: "not_found" }, { status: 404 });
 
   const db = getDb();
@@ -197,10 +203,11 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const slug = url.searchParams.get("slug");
   const resumeToken = url.searchParams.get("resumeToken");
+  const preview = url.searchParams.get("preview") === "1";
   if (!slug || !resumeToken) {
     return Response.json({ error: "invalid" }, { status: 400 });
   }
-  const school = await getPublicSchoolBySlug(slug);
+  const school = await getSchoolForLandingAccess(slug, { preview });
   if (!school) return Response.json({ error: "not_found" }, { status: 404 });
   const db = getDb();
   const [conversation] = await db

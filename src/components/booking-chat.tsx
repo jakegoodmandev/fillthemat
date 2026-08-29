@@ -21,12 +21,14 @@ export function BookingChat({
   location,
   offerings,
   welcomeMessage,
+  preview = false,
 }: {
   slug: string;
   schoolName: string;
   location: string | null;
   offerings: Offering[];
   welcomeMessage: string | null;
+  preview?: boolean;
 }) {
   const [resumeToken, setResumeToken] = useState<string | null>(null);
   const [prepared, setPrepared] = useState<{
@@ -48,12 +50,13 @@ export function BookingChat({
         prepareSendMessagesRequest: ({ messages }) => ({
           body: {
             slug,
+            preview,
             resumeToken: readConversationToken(slug),
             message: messages.at(-1),
           },
         }),
       }),
-    [slug],
+    [slug, preview],
   );
 
   const { messages, sendMessage, status } = useChat({
@@ -64,7 +67,7 @@ export function BookingChat({
     if (!resumeToken) return;
     void (async () => {
       const response = await fetch(
-        `/api/chat?slug=${encodeURIComponent(slug)}&resumeToken=${encodeURIComponent(resumeToken)}`,
+        `/api/chat?slug=${encodeURIComponent(slug)}&resumeToken=${encodeURIComponent(resumeToken)}${preview ? "&preview=1" : ""}`,
       );
       if (!response.ok) return;
       const payload = (await response.json()) as { messages: UIMessage[] };
@@ -72,7 +75,7 @@ export function BookingChat({
       // and the first send continues the server-canonical transcript.
       void payload;
     })();
-  }, [resumeToken, slug]);
+  }, [resumeToken, slug, preview]);
 
   useEffect(() => {
     for (const message of messages) {
@@ -171,6 +174,7 @@ export function BookingChat({
           location={location}
           offerings={offerings}
           prepared={prepared}
+          preview={preview}
         />
       ) : null}
     </div>

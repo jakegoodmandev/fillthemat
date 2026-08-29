@@ -30,6 +30,7 @@ export function BookingFlow({
   location,
   offerings,
   prepared,
+  preview = false,
 }: {
   slug: string;
   schoolName: string;
@@ -41,6 +42,7 @@ export function BookingFlow({
     offeringName: string;
     whenLabel: string;
   } | null;
+  preview?: boolean;
 }) {
   const [offeringId, setOfferingId] = useState(prepared?.offeringId ?? "");
   const [age, setAge] = useState("");
@@ -66,7 +68,7 @@ export function BookingFlow({
     if (!offeringId || age === "") return;
     void (async () => {
       const response = await fetch(
-        `/api/slots?slug=${encodeURIComponent(slug)}&offeringId=${encodeURIComponent(offeringId)}&age=${encodeURIComponent(age)}`,
+        `/api/slots?slug=${encodeURIComponent(slug)}&offeringId=${encodeURIComponent(offeringId)}&age=${encodeURIComponent(age)}${preview ? "&preview=1" : ""}`,
       );
       const payload = (await response.json()) as {
         slots: Slot[];
@@ -77,7 +79,7 @@ export function BookingFlow({
         Boolean(payload.noMatch) || (payload.slots ?? []).length === 0,
       );
     })();
-  }, [offeringId, age, slug]);
+  }, [offeringId, age, slug, preview]);
 
   if (done) {
     return <p className="rounded-2xl border border-zinc-200 p-4">{done}</p>;

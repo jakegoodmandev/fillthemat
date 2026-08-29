@@ -1,5 +1,8 @@
 import { isAgeEligible, listOpenSlots } from "@/lib/schedule/occurrences";
-import { getPublicSchoolBySlug, loadSchoolCatalog } from "@/lib/schools/public";
+import {
+  getSchoolForLandingAccess,
+  loadSchoolCatalog,
+} from "@/lib/schools/public";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -9,7 +12,9 @@ export async function GET(request: Request) {
   if (!slug || !offeringId) {
     return Response.json({ error: "invalid" }, { status: 400 });
   }
-  const school = await getPublicSchoolBySlug(slug);
+  const school = await getSchoolForLandingAccess(slug, {
+    preview: url.searchParams.get("preview") === "1",
+  });
   if (!school) return Response.json({ error: "not_found" }, { status: 404 });
   const catalog = await loadSchoolCatalog(school.id);
   const offering = catalog.offerings.find(

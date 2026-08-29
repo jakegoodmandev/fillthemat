@@ -55,6 +55,7 @@ export default async function PublicSchoolPage({
         location={location}
         offerings={catalog.offerings}
         welcomeMessage={school.welcomeMessage}
+        preview={isPreview || !published}
       />
     </main>
   );
