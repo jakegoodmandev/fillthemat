@@ -5,12 +5,12 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 export function ContinueWithGoogle({ next = "/dashboard" }: { next?: string }) {
   async function onClick() {
     const supabase = createBrowserSupabaseClient();
-    const origin = window.location.origin;
-    document.cookie = `fillthemat_next=${encodeURIComponent(next)}; Path=/; Max-Age=600; SameSite=Lax`;
+    const redirectTo = new URL("/auth/callback", window.location.origin);
+    redirectTo.searchParams.set("next", next);
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${origin}/auth/callback`,
+        redirectTo: redirectTo.toString(),
         scopes: "openid email profile",
       },
     });
