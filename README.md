@@ -26,3 +26,15 @@ bun run dev
 ```
 
 4. Sign in with Google, create a school, then set `approved_at` in local Supabase Studio (`app.schools`) before publishing.
+
+## Hosted schema
+
+Keep the production session-pooler URI in gitignored `.env.production.local` (`DIRECT_URL` only). After `bun run db:generate` and a local `bun run db:migrate`:
+
+```
+bun run db:migrate:prod
+```
+
+## Agent skills
+
+Skills are pinned in `skills-lock.json` (not committed skill files). Coding agents restore them via `bun run skills:install`. See `AGENTS.md`.

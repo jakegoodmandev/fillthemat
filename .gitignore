@@ -51,3 +51,8 @@ supabase/.env
 /playwright-report
 /test-results
 /blob-report
+
+# Agent skills restored from skills-lock.json
+.agents/skills/
+.pi/skills/
+.claude/

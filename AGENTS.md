@@ -7,3 +7,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Agent skills
+
+`skills-lock.json` is the only source of truth for project skills. Do not vendor skill files or commit generated skill directories (`.agents/skills/`, `.pi/skills/`).
+
+At the start of a session:
+
+1. Read `skills-lock.json`.
+2. If those skills are missing locally, run `bun run skills:install`.
+3. Load and follow every installed skill that applies to the current task.
+
+`bun run skills:install` restores every skill listed in the lockfile. Add or refresh skills with `bun run skills:update` or `bunx skills add <package> --skill <name> -y`.
