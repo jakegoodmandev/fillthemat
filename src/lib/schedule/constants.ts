@@ -1,0 +1,6 @@
+export const SLOT_HORIZON_DAYS = 14;
+export const MIN_LEAD_MINUTES = 120;
+export const REMINDER_MIN_LEAD_HOURS = 36;
+export const REMINDER_WINDOW_HOURS = 24;
+export const TRANSCRIPT_RETENTION_DAYS = 30;
+export const LANDING_SESSION_MINUTES = 30;
