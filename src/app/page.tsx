@@ -5,7 +5,19 @@ import { getVerifiedClaims } from "@/lib/auth/current-user";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ code?: string; next?: string }>;
+}) {
+  const params = await searchParams;
+  if (params.code) {
+    const callback = new URLSearchParams();
+    callback.set("code", params.code);
+    if (params.next) callback.set("next", params.next);
+    redirect(`/auth/callback?${callback.toString()}`);
+  }
+
   const user = await getVerifiedClaims();
   if (user) {
     const school = await getOwnedSchool(user.id);

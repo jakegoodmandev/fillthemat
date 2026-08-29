@@ -10,7 +10,16 @@ function safeNext(value: string | null): string {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = safeNext(url.searchParams.get("next"));
+  const cookieNext = request.headers
+    .get("cookie")
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("fillthemat_next="))
+    ?.slice("fillthemat_next=".length);
+  const next = safeNext(
+    url.searchParams.get("next") ??
+      (cookieNext ? decodeURIComponent(cookieNext) : null),
+  );
 
   if (!code) {
     return NextResponse.redirect(new URL("/auth/error", url.origin));
@@ -21,5 +30,7 @@ export async function GET(request: Request) {
   if (error) {
     return NextResponse.redirect(new URL("/auth/error", url.origin));
   }
-  return NextResponse.redirect(new URL(next, url.origin));
+  const response = NextResponse.redirect(new URL(next, url.origin));
+  response.cookies.delete("fillthemat_next");
+  return response;
 }
