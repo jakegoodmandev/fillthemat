@@ -1,6 +1,6 @@
 # Local development onboarding
 
-This is the plan for making Fillthemat easy to run locally for humans and coding agents, and the canonical local-setup reference. Phase 1 (`bun run setup` / `bun run doctor`) is in the stack; Phases 2–3 are follow-up PRs.
+This is the plan for making Fillthemat easy to run locally for humans and coding agents, and the canonical local-setup reference. Phases 1–2 (`bun run setup`, local email auth, seed) are in the stack; Phase 3 degrades Resend/chat.
 
 **Do not freeze the current founder-alpha workflow.** It works for one operator who already has Google Cloud, Resend, Vercel, and Cloudflare accounts. It is too many external accounts, env files, and manual Studio steps for a new contributor.
 
@@ -236,15 +236,13 @@ No behavior change. New people can follow the workaround below.
 
 Sign-in still requires Google until Phase 2.
 
-### Phase 2 — Local auth + seed + self-approval
+### Phase 2 — Local auth + seed + self-approval — **landed (this PR)**
 
-- Email signup in `config.toml`.
-- Dev-only sign-in UI.
-- Seed owner + approved demo school.
-- `ALLOW_SELF_APPROVAL`.
-- Slim unused Supabase services.
-
-**Done when:** `bun run setup && bun run dev` → sign in as `owner@local.test` → dashboard and `/s/demo` (after publish, or seeded published). Zero Google Cloud.
+- Email signup in local `config.toml` (hosted Auth unchanged).
+- Dev-only sign-in UI when `NEXT_PUBLIC_DEV_AUTH=true`.
+- Seed `owner@local.test` / `local-dev-password` + approved unpublished `/s/demo`.
+- `ALLOW_SELF_APPROVAL` auto-approves schools created in development.
+- Slim unused Supabase services (realtime, storage, edge, vector).
 
 ### Phase 3 — Degradable vendors
 
@@ -271,16 +269,8 @@ Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and a **Docker Engi
 2. Agents: `bun run skills:install` (see `AGENTS.md` / `skills-lock.json`).
 3. `bun run setup` — starts Supabase, writes `.env.local`, migrates. If something fails: `bun run doctor`.
 4. `bun run dev` → `http://127.0.0.1:3000`.
-5. Google (currently required to sign in): create a Google Cloud **Web** OAuth client. Authorized redirect: `http://127.0.0.1:54321/auth/v1/callback`. Put real values in `supabase/.env` (setup only writes placeholders) and restart Supabase:
-
-   ```
-   SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=
-   SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=
-   ```
-
-   Then `bun run supabase:stop && bun run setup` (or `bunx supabase stop` then setup).
-
-6. Sign in with Google, create a school, then in Studio (`http://127.0.0.1:54323`) set `app.schools.approved_at` to now. (Phase 2 removes this.)
+5. Sign in at `/sign-in` with `owner@local.test` / `local-dev-password`. Preview then publish `/s/demo` from the dashboard (school is pre-approved).
+6. Optional Google: Web client callback `http://127.0.0.1:54321/auth/v1/callback`, real values in `supabase/.env`, then `bun run supabase:stop && bun run setup`.
 7. Optional: `bunx vercel env pull` so `.env.local` contains `VERCEL_OIDC_TOKEN` (needed for real chat). Optional: Resend test key + `RESEND_FROM=onboarding@resend.dev` (mail only reaches the Resend account owner).
 
 Checks: `bun run check`, `bun run test`. Do not run `bun run db:migrate:prod` unless you intend to migrate hosted data (`docs/v1-deploy-current.md`).

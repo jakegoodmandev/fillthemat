@@ -135,7 +135,9 @@ export default async function DashboardPage({
         <p>Status: {school.publishedAt ? "Published" : "Unpublished"}</p>
         <p>
           Approved:{" "}
-          {school.approvedAt ? "yes" : "no (ask founder to approve in Studio)"}
+          {school.approvedAt
+            ? "yes"
+            : "no (local: ALLOW_SELF_APPROVAL or set approved_at in Studio)"}
         </p>
         <p>Previewed: {school.previewedAt ? "yes" : "no"}</p>
         {publicUrl ? <p>Public URL: {publicUrl}</p> : null}

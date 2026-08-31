@@ -14,7 +14,7 @@ bun run setup
 bun run dev
 ```
 
-`bun run setup` starts local Supabase (OrbStack / any Docker Engine), writes `.env.local`, and migrates. Sign-in is still Google until the local-auth follow-up; `bun run doctor` checks the stack.
+`bun run setup` starts local Supabase (OrbStack / any Docker Engine), writes `.env.local`, migrates, and seeds `owner@local.test` / `local-dev-password`. Then `bun run dev` and sign in with that email. `bun run doctor` checks the stack.
 
 ## Hosted schema
 

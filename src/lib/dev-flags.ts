@@ -1,0 +1,10 @@
+export function isDevEmailAuthEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_DEV_AUTH === "true";
+}
+
+export function allowSelfApproval(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    process.env.ALLOW_SELF_APPROVAL === "true"
+  );
+}
