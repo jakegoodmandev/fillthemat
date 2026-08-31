@@ -2,13 +2,19 @@ import { Resend } from "resend";
 
 let cached: Resend | undefined;
 
-export function getResend(): Resend {
+export function getResendOrNull(): Resend | null {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) throw new Error("RESEND_API_KEY is not set");
+  if (!apiKey) return null;
   if (!cached) {
     cached = new Resend(apiKey);
   }
   return cached;
+}
+
+export function getResend(): Resend {
+  const resend = getResendOrNull();
+  if (!resend) throw new Error("RESEND_API_KEY is not set");
+  return resend;
 }
 
 export function getFromAddress(): string {
