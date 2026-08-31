@@ -6,6 +6,7 @@ import { getDb } from "@/db";
 import { schools } from "@/db/schema";
 import { getOwnedSchool } from "@/lib/auth/current-school";
 import { requireUser } from "@/lib/auth/current-user";
+import { allowSelfApproval } from "@/lib/dev-flags";
 import { isValidTimezone } from "@/lib/timezones";
 import { onboardingSchema } from "@/lib/validation";
 
@@ -41,6 +42,7 @@ export async function createSchoolAction(formData: FormData) {
     city: parsed.data.city,
     notificationEmail: parsed.data.notificationEmail,
     country: "US",
+    approvedAt: allowSelfApproval() ? new Date() : null,
   });
 
   redirect("/dashboard/settings");

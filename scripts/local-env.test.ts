@@ -60,6 +60,8 @@ describe("mergeLocalEnv", () => {
     expect(merged.TURNSTILE_SECRET_KEY).toBe(TURNSTILE_TEST_SECRET_KEY);
     expect(merged.RESEND_API_KEY).toBe("re_test");
     expect(merged.VERCEL_OIDC_TOKEN).toBe("oidc");
+    expect(merged.ALLOW_SELF_APPROVAL).toBe("true");
+    expect(merged.NEXT_PUBLIC_DEV_AUTH).toBe("true");
     expect(missingRequiredKeys(merged)).toEqual([]);
   });
 

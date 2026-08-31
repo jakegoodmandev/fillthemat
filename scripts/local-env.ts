@@ -149,6 +149,8 @@ export function mergeLocalEnv(
     existing.NEXT_PUBLIC_TURNSTILE_SITE_KEY || TURNSTILE_TEST_SITE_KEY;
   next.TURNSTILE_SECRET_KEY =
     existing.TURNSTILE_SECRET_KEY || TURNSTILE_TEST_SECRET_KEY;
+  next.ALLOW_SELF_APPROVAL = existing.ALLOW_SELF_APPROVAL || "true";
+  next.NEXT_PUBLIC_DEV_AUTH = existing.NEXT_PUBLIC_DEV_AUTH || "true";
 
   for (const key of PRESERVE_IF_SET) {
     const value = existing[key];

@@ -45,7 +45,7 @@ function ensureGooglePlaceholder() {
   console.log(`Wrote ${SUPABASE_ENV} with Google placeholders.`);
 }
 
-function main() {
+async function main() {
   assertBun();
   assertDocker();
   ensureGooglePlaceholder();
@@ -59,6 +59,7 @@ function main() {
   const generatedSecret = `${crypto.randomUUID()}${crypto.randomUUID()}`;
   const merged = mergeLocalEnv(existing, status, generatedSecret);
   writeEnvFile(ENV_LOCAL, merged);
+  Object.assign(process.env, merged);
   console.log(`Wrote ${ENV_LOCAL} (existing vendor keys preserved).`);
 
   console.log("Applying Drizzle migrations…");
@@ -67,15 +68,16 @@ function main() {
     DATABASE_URL: merged.DATABASE_URL,
   });
 
+  const { seedLocal } = await import("./seed-local");
+  await seedLocal();
+
   console.log("");
   console.log("Local stack is ready.");
   if (status.studioUrl) console.log(`  Studio    ${status.studioUrl}`);
   if (status.inbucketUrl) console.log(`  Inbucket  ${status.inbucketUrl}`);
   console.log("  App       bun run dev  → http://127.0.0.1:3000");
+  console.log("  Sign in   owner@local.test / local-dev-password");
   console.log("");
-  console.log(
-    "Sign-in still needs Google until the local-auth stacked PR lands. After that: bun run setup seeds owner@local.test.",
-  );
   if (!existing.VERCEL_OIDC_TOKEN && !merged.VERCEL_OIDC_TOKEN) {
     console.log(
       "Optional: bunx vercel env pull  (OIDC token for real booking chat).",
@@ -83,4 +85,4 @@ function main() {
   }
 }
 
-main();
+await main();
