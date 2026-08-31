@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "bun run --bun next dev",
+    "quickstart": "bun install && bun run setup && bun run dev",
+    "dev": "bun scripts/dev-local.ts",
+    "setup": "bun scripts/setup-local.ts",
+    "doctor": "bun scripts/doctor-local.ts",
     "build": "bun run --bun next build",
     "start": "bun run --bun next start",
     "check": "biome check .",

@@ -159,11 +159,31 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
+# Worktree frontends share this Auth stack. Eligible app ports: 3000 + n*10 for n=0..9.
+# Restart `supabase stop` + setup once after changing this list.
 additional_redirect_urls = [
   "http://127.0.0.1:3000/auth/callback",
   "http://127.0.0.1:3000/**",
   "http://localhost:3000/auth/callback",
   "http://localhost:3000/**",
+  "http://127.0.0.1:3010/**",
+  "http://localhost:3010/**",
+  "http://127.0.0.1:3020/**",
+  "http://localhost:3020/**",
+  "http://127.0.0.1:3030/**",
+  "http://localhost:3030/**",
+  "http://127.0.0.1:3040/**",
+  "http://localhost:3040/**",
+  "http://127.0.0.1:3050/**",
+  "http://localhost:3050/**",
+  "http://127.0.0.1:3060/**",
+  "http://localhost:3060/**",
+  "http://127.0.0.1:3070/**",
+  "http://localhost:3070/**",
+  "http://127.0.0.1:3080/**",
+  "http://localhost:3080/**",
+  "http://127.0.0.1:3090/**",
+  "http://localhost:3090/**",
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
