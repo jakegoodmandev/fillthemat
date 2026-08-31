@@ -1,9 +1,11 @@
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { eq } from "drizzle-orm";
 import { getDb } from "../src/db";
 import { schools, trialOfferings, trialWindows, users } from "../src/db/schema";
 import { parseSupabaseStatusEnv, readEnvFile } from "./local-env";
-import { capture, fail } from "./local-process";
+import { fail, tryCapture } from "./local-process";
 
 export const LOCAL_OWNER_EMAIL = "owner@local.test";
 export const LOCAL_OWNER_PASSWORD = "local-dev-password";
@@ -50,9 +52,18 @@ async function ensureAuthUser(apiUrl: string, serviceRoleKey: string) {
 
 export async function seedLocal() {
   loadEnv();
-  const status = parseSupabaseStatusEnv(
-    capture("bunx", ["supabase", "status", "-o", "env"]),
-  );
+  const statusResult = tryCapture("bunx", [
+    "supabase",
+    "status",
+    "-o",
+    "env",
+  ]);
+  if (!statusResult.ok) {
+    fail(
+      `Local Supabase is not running. bun run setup (or bun run supabase:start). ${statusResult.stderr}`,
+    );
+  }
+  const status = parseSupabaseStatusEnv(statusResult.stdout);
   if (!status.serviceRoleKey) {
     fail("supabase status did not include SERVICE_ROLE_KEY.");
   }
@@ -167,7 +178,7 @@ export async function seedLocal() {
   );
 }
 
-if (import.meta.main) {
+if (fileURLToPath(import.meta.url) === resolve(process.argv[1] ?? "")) {
   await seedLocal();
   process.exit(0);
 }
