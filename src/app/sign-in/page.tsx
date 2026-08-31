@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { ContinueWithGoogle } from "@/components/continue-with-google";
+import { DevEmailAuth } from "@/components/dev-email-auth";
 import { getVerifiedClaims } from "@/lib/auth/current-user";
+import { isDevEmailAuthEnabled } from "@/lib/dev-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,7 @@ export default async function SignInPage() {
       <p className="text-sm text-zinc-400">
         School owners sign in with Google. Prospects never need an account.
       </p>
+      {isDevEmailAuthEnabled() ? <DevEmailAuth /> : null}
       <ContinueWithGoogle />
     </main>
   );

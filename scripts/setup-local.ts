@@ -9,6 +9,7 @@ import {
 import { claimAppSlotForCwd, localSiteUrl } from "./local-ports";
 import { fail, tryCapture } from "./local-process";
 
+
 const ENV_LOCAL = ".env.local";
 const SUPABASE_ENV = "supabase/.env";
 
@@ -85,6 +86,10 @@ async function main() {
     },
   });
 
+
+  const { seedLocal } = await import("./seed-local");
+  await seedLocal();
+
   console.log("");
   console.log("Local stack is ready.");
   if (status.studioUrl) console.log(`  Studio    ${status.studioUrl}`);
@@ -93,9 +98,8 @@ async function main() {
     `  App       bun run dev  → ${localSiteUrl(claim.appPort)}  (slot ${claim.slot})`,
   );
   console.log("");
-  console.log(
-    "Sign-in still needs Google until the local-auth stacked PR lands. After that: bun run setup seeds owner@local.test.",
-  );
+  console.log("  Sign in   owner@local.test / local-dev-password");
+  console.log("");
   if (!existing.VERCEL_OIDC_TOKEN && !merged.VERCEL_OIDC_TOKEN) {
     console.log(
       "Optional: bunx vercel env pull  (OIDC token for real booking chat).",
