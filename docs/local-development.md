@@ -270,7 +270,7 @@ Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and a **Docker Engi
 1. `bun install`
 2. Agents: `bun run skills:install` (see `AGENTS.md` / `skills-lock.json`).
 3. `bun run setup` — starts Supabase, writes `.env.local`, migrates. If something fails: `bun run doctor`.
-4. `bun run dev` → the origin setup printed (`http://127.0.0.1:30X0` on the main checkout). Worktrees: `git worktree add .worktrees/<task> -b feat/<task>`, then `bun quickstart` in that tree (new app port, same Docker). Do not `supabase stop` from a child tree.
+4. `bun run dev` → the origin setup printed (usually `http://127.0.0.1:3000` on the main checkout). Worktrees: `git worktree add .worktrees/<task> -b feat/<task>`, then `bun quickstart` in that tree (new app port, same Docker). Do not `supabase stop` from a child tree.
 5. Google (currently required to sign in): create a Google Cloud **Web** OAuth client. Authorized redirect: `http://127.0.0.1:54321/auth/v1/callback`. Put real values in `supabase/.env` (setup only writes placeholders) and restart Supabase:
 
    ```
@@ -285,7 +285,19 @@ Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and a **Docker Engi
 
 Checks: `bun run check`, `bun run test`. Do not run `bun run db:migrate:prod` unless you intend to migrate hosted data (`docs/v1-deploy-current.md`).
 
-Worktrees: reuse the already-running Supabase on fixed ports; do not start a second stack. `bun run setup` claims a Next port (`3000`, `3010`, … `3090`) in `.git/fillthemat-slots.json` and writes `PORT` + `NEXT_PUBLIC_SITE_URL` for that tree. Auth `additional_redirect_urls` already allow that range; restart Supabase once after pulling this config change.
+### Worktree frontend ports
+
+Worktrees reuse the already-running Supabase on fixed ports; do not start or stop a second stack. `bun run setup` claims a Next port (`3000`, `3010`, … `3090`) in `.git/fillthemat-slots.json` and writes matching `PORT` + `NEXT_PUBLIC_SITE_URL` values for that tree. Auth `additional_redirect_urls` allow that range; restart Supabase once after pulling this config change.
+
+The setup-owned port is a **core assumption** of the multi-worktree workflow:
+
+- Use the origin printed by `bun run setup` and then start the frontend with plain `bun run dev`.
+- Do not run `PORT=… bun run dev`, pass another `--port`, or manually edit `PORT` / `NEXT_PUBLIC_SITE_URL`. An ambient `PORT` can override the persisted assignment at dev time and leave generated URLs or auth redirects pointing at the wrong frontend. If your shell or agent harness defines `PORT`, unset it before setup/dev.
+- Reserve eligible ports `3000`, `3010`, … `3090` for Fillthemat worktrees. A new explicit or migrated assignment is not guaranteed to detect an unrelated listener already using that port.
+- If Next reports `EADDRINUSE`, or `bun run doctor` reports a site URL mismatch, stop and report the collision. Do not work around it by selecting an arbitrary port; that bypasses the registry and Auth allow-list.
+- A worktree keeps its assignment across reruns. Removing the worktree directory allows a later setup to reclaim its slot.
+
+This is an accepted local-only limitation: it can prevent a frontend from starting or send local redirects to another worktree, but it does not affect hosted production or create a separate database. The agent contract above avoids the known cases until allocator hardening is worth doing.
 
 ---
 
