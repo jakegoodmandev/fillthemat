@@ -50,7 +50,7 @@ bun run dev
 | 8 | **Heavy local Supabase** | `config.toml` enables db, auth, studio, realtime, storage, edge runtime, vector, S3 protocol, local SMTP. Fillthemat only needs **Postgres + Auth** (Studio and Inbucket are nice-to-have). Slow start, high RAM, needs a running Docker Engine. |
 | 9 | **Bootstrap / doctor** | **Phase 1 landed:** `bun run setup` starts Supabase, writes `.env.local` from `supabase status`, fills Turnstile test keys + `CRON_SECRET`, migrates. `bun run doctor` probes Bun, `docker info`, status, and required keys. |
 | 10 | **Docs drift** | README, `docs/v1-plan.md`, and `docs/v1-deploy-current.md` overlap. Local vs hosted steps are mixed. No `CONTRIBUTING.md`. `AGENTS.md` does not mention how to run the app. |
-| 11 | **One stack per machine** | `project_id = "fillthemat"` and fixed ports (`54321`–`54324`, `54322` db). Git worktrees (`.worktrees`) share that stack; a second `supabase start` will collide. |
+| 11 | **One Supabase stack per machine** | `project_id = "fillthemat"` and fixed API/DB ports (`54321`–`54324`, `54322` db). Git worktrees share Docker. Each worktree gets its own Next port (`3000 + n*10`) from `bun run setup`; do not start a second Supabase. |
 | 12 | **Tests do not prove the stack** | Unit tests need no Docker. Integration config exists with **zero** `*.integration.test.ts` files. Playwright smoke needs `bun run dev` but not a seeded school. No CI. |
 
 None of this is a reason to abandon local Supabase. The Auth JWTs, `auth.users` FK in `drizzle/0000_*.sql`, and “browser uses Auth only / server uses Drizzle” split are the product’s data model. Replacing that with a fake auth layer would create a second, lying environment.
@@ -94,7 +94,7 @@ bunx vercel env pull            # OIDC for real booking chat
 | `DATABASE_URL` / `DIRECT_URL` | `postgresql://postgres:postgres@127.0.0.1:54322/postgres` | Yes — written by setup |
 | `NEXT_PUBLIC_SUPABASE_URL` | `http://127.0.0.1:54321` | Yes — written by setup |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | from `supabase status -o env` | Yes — written by setup |
-| `NEXT_PUBLIC_SITE_URL` | `http://127.0.0.1:3000` | Yes |
+| `PORT` / `NEXT_PUBLIC_SITE_URL` | `3000 + n*10` / `http://127.0.0.1:<PORT>` (claimed per worktree) | Yes — written by setup. Next ignores `PORT` in `.env`; `bun run dev` passes `--port`. |
 | `CRON_SECRET` | generated UUID | Yes (cron route rejects empty) |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare always-pass test keys | Yes for booking forms; safe to commit as defaults in the generator |
 | `RESEND_API_KEY` / `RESEND_FROM` / `RESEND_WEBHOOK_SECRET` | unset | No — local mail adapter logs instead of sending |
@@ -270,7 +270,7 @@ Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and a **Docker Engi
 1. `bun install`
 2. Agents: `bun run skills:install` (see `AGENTS.md` / `skills-lock.json`).
 3. `bun run setup` — starts Supabase, writes `.env.local`, migrates. If something fails: `bun run doctor`.
-4. `bun run dev` → `http://127.0.0.1:3000`.
+4. `bun run dev` → the origin setup printed (`http://127.0.0.1:3000` on the main checkout). Worktrees: `git worktree add .worktrees/<task> -b feat/<task>`, then `bun install && bun run setup && bun run dev` in that tree (new app port, same Docker). Do not `supabase stop` from a child tree.
 5. Google (currently required to sign in): create a Google Cloud **Web** OAuth client. Authorized redirect: `http://127.0.0.1:54321/auth/v1/callback`. Put real values in `supabase/.env` (setup only writes placeholders) and restart Supabase:
 
    ```
@@ -285,7 +285,7 @@ Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and a **Docker Engi
 
 Checks: `bun run check`, `bun run test`. Do not run `bun run db:migrate:prod` unless you intend to migrate hosted data (`docs/v1-deploy-current.md`).
 
-Worktrees: reuse the already-running Supabase on fixed ports; do not start a second stack.
+Worktrees: reuse the already-running Supabase on fixed ports; do not start a second stack. `bun run setup` claims a Next port (`3000`, `3010`, … `3090`) in `.git/fillthemat-slots.json` and writes `PORT` + `NEXT_PUBLIC_SITE_URL` for that tree. Auth `additional_redirect_urls` already allow that range; restart Supabase once after pulling this config change.
 
 ---
 

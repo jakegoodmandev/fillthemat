@@ -3,6 +3,7 @@ import {
   parseSupabaseStatusEnv,
   readEnvFile,
 } from "./local-env";
+import { localSiteUrl, parsePort, slotForAppPort } from "./local-ports";
 import { fail, tryCapture } from "./local-process";
 
 const ENV_LOCAL = ".env.local";
@@ -66,6 +67,23 @@ function main() {
       `${ENV_LOCAL} has required keys`,
       `${ENV_LOCAL} missing: ${missing.join(", ")}. Run bun run setup.`,
     ) && healthy;
+
+  const appPort = parsePort(env.PORT);
+  if (env.PORT && appPort === undefined) {
+    healthy = false;
+    console.error(`err Invalid PORT=${env.PORT}. Run bun run setup.`);
+  } else if (appPort !== undefined) {
+    const slot = slotForAppPort(appPort);
+    const expectedSite = localSiteUrl(appPort);
+    const slotLabel = slot === undefined ? "custom" : `slot ${slot}`;
+    console.log(`ok  app ${expectedSite} (${slotLabel})`);
+    if (env.NEXT_PUBLIC_SITE_URL && env.NEXT_PUBLIC_SITE_URL !== expectedSite) {
+      healthy = false;
+      console.error(
+        `err NEXT_PUBLIC_SITE_URL=${env.NEXT_PUBLIC_SITE_URL} does not match PORT=${appPort} (${expectedSite}). Run bun run setup.`,
+      );
+    }
+  }
 
   if (env.VERCEL_OIDC_TOKEN)
     console.log("ok  VERCEL_OIDC_TOKEN present (real chat)");

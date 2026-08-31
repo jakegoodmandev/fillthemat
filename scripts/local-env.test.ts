@@ -42,6 +42,7 @@ describe("mergeLocalEnv", () => {
       "generated-secret",
     );
     expect(merged.NEXT_PUBLIC_SITE_URL).toBe(LOCAL_SITE_URL);
+    expect(merged.PORT).toBe("3000");
     expect(merged.CRON_SECRET).toBe("keep-me");
     expect(merged.NEXT_PUBLIC_TURNSTILE_SITE_KEY).toBe(TURNSTILE_TEST_SITE_KEY);
     expect(merged.TURNSTILE_SECRET_KEY).toBe(TURNSTILE_TEST_SECRET_KEY);
@@ -62,6 +63,22 @@ describe("mergeLocalEnv", () => {
     );
     expect(merged.RESEND_API_KEY).toBeUndefined();
     expect(merged.CRON_SECRET).toBe("generated-secret");
+  });
+
+  it("binds SITE_URL to the claimed app port", () => {
+    const merged = mergeLocalEnv(
+      { NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3000" },
+      {
+        apiUrl: "http://127.0.0.1:54321",
+        publishableKey: "anon",
+        dbUrl: "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+      },
+      "generated-secret",
+      { appPort: 3020 },
+    );
+    expect(merged.PORT).toBe("3020");
+    expect(merged.NEXT_PUBLIC_SITE_URL).toBe("http://127.0.0.1:3020");
+    expect(missingRequiredKeys(merged)).toEqual([]);
   });
 });
 

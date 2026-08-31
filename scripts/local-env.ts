@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseEnv } from "node:util";
+import { APP_PORT_BASE, localSiteUrl } from "./local-ports";
 
-export const LOCAL_SITE_URL = "http://127.0.0.1:3000";
+export const LOCAL_SITE_URL = localSiteUrl(APP_PORT_BASE);
 export const LOCAL_DB_FALLBACK =
   "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
@@ -15,6 +16,7 @@ export const REQUIRED_LOCAL_KEYS = [
   "DIRECT_URL",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "PORT",
   "NEXT_PUBLIC_SITE_URL",
   "CRON_SECRET",
   "NEXT_PUBLIC_TURNSTILE_SITE_KEY",
@@ -36,6 +38,7 @@ const KEY_ORDER = [
   "DIRECT_URL",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+  "PORT",
   "NEXT_PUBLIC_SITE_URL",
   "CRON_SECRET",
   "NEXT_PUBLIC_TURNSTILE_SITE_KEY",
@@ -121,17 +124,23 @@ export function parseSupabaseStatusEnv(text: string): SupabaseStatusEnv {
   };
 }
 
+export type LocalAppBind = {
+  appPort: number;
+};
+
 export function mergeLocalEnv(
   existing: Record<string, string>,
   status: SupabaseStatusEnv,
   generatedSecret: string,
+  bind: LocalAppBind = { appPort: APP_PORT_BASE },
 ): Record<string, string> {
   const next: Record<string, string> = { ...existing };
   next.DATABASE_URL = status.dbUrl;
   next.DIRECT_URL = status.dbUrl;
   next.NEXT_PUBLIC_SUPABASE_URL = status.apiUrl;
   next.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = status.publishableKey;
-  next.NEXT_PUBLIC_SITE_URL = existing.NEXT_PUBLIC_SITE_URL || LOCAL_SITE_URL;
+  next.PORT = String(bind.appPort);
+  next.NEXT_PUBLIC_SITE_URL = localSiteUrl(bind.appPort);
   next.CRON_SECRET = existing.CRON_SECRET || generatedSecret;
   next.NEXT_PUBLIC_TURNSTILE_SITE_KEY =
     existing.NEXT_PUBLIC_TURNSTILE_SITE_KEY || TURNSTILE_TEST_SITE_KEY;

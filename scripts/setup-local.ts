@@ -6,6 +6,7 @@ import {
   readEnvFile,
   writeEnvFile,
 } from "./local-env";
+import { claimAppSlotForCwd, localSiteUrl } from "./local-ports";
 import { fail, tryCapture } from "./local-process";
 
 const ENV_LOCAL = ".env.local";
@@ -46,7 +47,7 @@ function ensureGooglePlaceholder() {
   console.log(`Wrote ${SUPABASE_ENV} with Google placeholders.`);
 }
 
-function main() {
+async function main() {
   assertBun();
   assertDocker();
   ensureGooglePlaceholder();
@@ -59,10 +60,20 @@ function main() {
   });
   const status = parseSupabaseStatusEnv(statusText);
   const existing = readEnvFile(ENV_LOCAL);
+  const portHint =
+    existing.PORT ||
+    existing.NEXT_PUBLIC_SITE_URL?.match(/^http:\/\/127\.0\.0\.1:(\d+)$/)?.[1];
+  const claim = await claimAppSlotForCwd(portHint).catch((error) =>
+    fail(error instanceof Error ? error.message : String(error)),
+  );
   const generatedSecret = `${crypto.randomUUID()}${crypto.randomUUID()}`;
-  const merged = mergeLocalEnv(existing, status, generatedSecret);
+  const merged = mergeLocalEnv(existing, status, generatedSecret, {
+    appPort: claim.appPort,
+  });
   writeEnvFile(ENV_LOCAL, merged);
-  console.log(`Wrote ${ENV_LOCAL} (existing vendor keys preserved).`);
+  console.log(
+    `Wrote ${ENV_LOCAL} (existing vendor keys preserved; app slot ${claim.slot} → ${localSiteUrl(claim.appPort)}).`,
+  );
 
   console.log("Applying Drizzle migrations…");
   execFileSync("bunx", ["drizzle-kit", "migrate"], {
@@ -78,7 +89,9 @@ function main() {
   console.log("Local stack is ready.");
   if (status.studioUrl) console.log(`  Studio    ${status.studioUrl}`);
   if (status.inbucketUrl) console.log(`  Inbucket  ${status.inbucketUrl}`);
-  console.log("  App       bun run dev  → http://127.0.0.1:3000");
+  console.log(
+    `  App       bun run dev  → ${localSiteUrl(claim.appPort)}  (slot ${claim.slot})`,
+  );
   console.log("");
   console.log(
     "Sign-in still needs Google until the local-auth stacked PR lands. After that: bun run setup seeds owner@local.test.",
@@ -90,4 +103,6 @@ function main() {
   }
 }
 
-main();
+main().catch((error) => {
+  fail(error instanceof Error ? error.message : String(error));
+});

@@ -14,7 +14,7 @@ bun run setup
 bun run dev
 ```
 
-`bun run setup` starts local Supabase (OrbStack / any Docker Engine), writes `.env.local`, and migrates. Sign-in is still Google until the local-auth follow-up; `bun run doctor` checks the stack.
+`bun run setup` starts local Supabase (OrbStack / any Docker Engine), writes `.env.local`, and migrates. Worktrees share that Docker stack and get their own Next port. Sign-in is still Google until the local-auth follow-up; `bun run doctor` checks the stack.
 
 ## Hosted schema
 
