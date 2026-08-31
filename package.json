@@ -5,6 +5,7 @@
   "scripts": {
     "quickstart": "bun install && bun run setup && bun run dev",
     "dev": "bun scripts/dev-local.ts",
+    "dev:stop": "bun scripts/stop-dev-local.ts",
     "setup": "bun scripts/setup-local.ts",
     "doctor": "bun scripts/doctor-local.ts",
     "db:seed": "bun scripts/seed-local.ts",

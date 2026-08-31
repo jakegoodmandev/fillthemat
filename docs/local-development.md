@@ -285,6 +285,7 @@ The setup-owned port is a **core assumption** of the multi-worktree workflow:
 - Do not run `PORT=… bun run dev`, pass another `--port`, or manually edit `PORT` / `NEXT_PUBLIC_SITE_URL`. An ambient `PORT` can override the persisted assignment at dev time and leave generated URLs or auth redirects pointing at the wrong frontend. If your shell or agent harness defines `PORT`, unset it before setup/dev.
 - Reserve eligible ports `3000`, `3010`, … `3090` for Fillthemat worktrees. A new explicit or migrated assignment is not guaranteed to detect an unrelated listener already using that port.
 - If Next reports `EADDRINUSE`, or `bun run doctor` reports a site URL mismatch, stop and report the collision. Do not work around it by selecting an arbitrary port; that bypasses the registry and Auth allow-list.
+- Stop this worktree's frontend with `bun run dev:stop`. It SIGTERMs listeners on the setup-owned `PORT` from `.env.local` and does not touch Supabase or other worktrees.
 - A worktree keeps its assignment across reruns. Removing the worktree directory allows a later setup to reclaim its slot.
 
 This is an accepted local-only limitation: it can prevent a frontend from starting or send local redirects to another worktree, but it does not affect hosted production or create a separate database. The agent contract above avoids the known cases until allocator hardening is worth doing.

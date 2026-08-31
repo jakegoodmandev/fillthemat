@@ -20,6 +20,7 @@ Each worktree shares the machine's one Supabase/Docker stack but owns the Next.j
 - Do not export or override `PORT`, pass `--port` to `bun run dev`, or manually edit `PORT` / `NEXT_PUBLIC_SITE_URL` in `.env.local`.
 - Assume eligible ports (`3000`, `3010`, … `3090`) are reserved for this repo. The allocator does not reliably recover from an unrelated process already occupying a persisted/manual port.
 - If the allocated port is occupied or disagrees with `NEXT_PUBLIC_SITE_URL`, stop and report the collision; do not silently choose another port.
+- Stop this worktree's Next process with `bun run dev:stop`. Do not `pkill` Next/dev-local by name.
 - Do not stop or recreate Supabase from a child worktree; other agents may be using it.
 
 ## Agent skills
