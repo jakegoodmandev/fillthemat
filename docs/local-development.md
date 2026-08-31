@@ -47,8 +47,8 @@ bun run dev
 | 5 | **Resend throws if unset** | `getResend()` / `getFromAddress()` throw. Booking can succeed while confirmation mail crashes the worker. Founder-alpha `onboarding@resend.dev` only delivers to the Resend owner. |
 | 6 | **Turnstile is required for booking UI** | Site key is read in client components; missing secret makes `verifyTurnstile` return false. Cloudflare **always-pass test keys** exist and are public, but they are not in `.env.example`. |
 | 7 | **AI chat needs Vercel OIDC** | `gateway(BOOKING_AGENT_MODEL)` plus `VERCEL_OIDC_TOKEN`. Default model `anthropic/claude-sonnet-4.6` is not on Gateway free tier (`docs/v1-plan-remaining.md`). Local chat is gated on `vercel login` + `vercel env pull` and a allowed model id. |
-| 8 | **Heavy local Supabase** | `config.toml` enables db, auth, studio, realtime, storage, edge runtime, vector, S3 protocol, local SMTP. Fillthemat only needs **Postgres + Auth** (Studio and Inbucket are nice-to-have). Slow start, high RAM, Docker required. |
-| 9 | **No bootstrap / doctor** | Keys from `supabase start` are not written to `.env.local`. No check that Docker is up, Bun is 1.4, or `app.schools` exists. |
+| 8 | **Heavy local Supabase** | `config.toml` enables db, auth, studio, realtime, storage, edge runtime, vector, S3 protocol, local SMTP. Fillthemat only needs **Postgres + Auth** (Studio and Inbucket are nice-to-have). Slow start, high RAM, needs a running Docker Engine. |
+| 9 | **No bootstrap / doctor** | Keys from `supabase start` are not written to `.env.local`. No check that the container engine is up, Bun is 1.4, or `app.schools` exists. |
 | 10 | **Docs drift** | README, `docs/v1-plan.md`, and `docs/v1-deploy-current.md` overlap. Local vs hosted steps are mixed. No `CONTRIBUTING.md`. `AGENTS.md` does not mention how to run the app. |
 | 11 | **One stack per machine** | `project_id = "fillthemat"` and fixed ports (`54321`–`54324`, `54322` db). Git worktrees (`.worktrees`) share that stack; a second `supabase start` will collide. |
 | 12 | **Tests do not prove the stack** | Unit tests need no Docker. Integration config exists with **zero** `*.integration.test.ts` files. Playwright smoke needs `bun run dev` but not a seeded school. No CI. |
@@ -70,7 +70,7 @@ None of this is a reason to abandon local Supabase. The Auth JWTs, `auth.users` 
 ### Target command sequence
 
 ```bash
-# once per machine: Bun 1.4.x and Docker Desktop (or compatible engine)
+# once per machine: Bun 1.4.x and a Docker Engine (OrbStack, Docker Desktop, Colima, …)
 git clone <repo> && cd fillthemat
 bun install
 bun run setup          # start supabase, write .env.local, migrate, seed
@@ -113,7 +113,7 @@ Unify on **`.env.local`**. Stop documenting `.env` for app secrets. Keep `supaba
 Idempotent. Safe to re-run.
 
 1. Assert `bun --version` matches `packageManager` (`bun@1.4.0` line).
-2. Assert Docker is reachable (`docker info`).
+2. Assert a Docker Engine is reachable (`docker info`). This is the right probe for OrbStack, Docker Desktop, and Colima — do not look for “Docker Desktop.app”.
 3. `bunx supabase start` (reuse if already running).
 4. `bunx supabase status -o env` → merge into `.env.local` without clobbering keys the human already set (`RESEND_*`, `VERCEL_OIDC_TOKEN`, `BOOKING_AGENT_MODEL`).
 5. Fill remaining required locals (site URL, Turnstile test keys, `CRON_SECRET`, `ALLOW_SELF_APPROVAL=true`).
@@ -209,7 +209,7 @@ No code change required if keys are present.
 - Replacing Drizzle migrations with `supabase db diff` / `db push`
 - RLS on `app.*`
 - Enabling email auth on the hosted project
-- Devcontainers / Nix / `mise` (revisit only if Docker+Bun still fails for people)
+- Devcontainers / Nix / `mise` (revisit only if Bun + a Docker Engine still fails for people)
 - TesterArmy or extra SaaS for local boot
 
 ---
@@ -233,7 +233,7 @@ No behavior change. New people can follow the workaround below.
 - README quickstart becomes `bun install && bun run setup && bun run dev`.
 - Leave Google and Studio approval as they are so Phase 1 is still useful to the founder.
 
-**Done when:** a contributor with Docker and Bun, and without any SaaS keys, gets Next listening and Studio opening. Sign-in may still require Google until Phase 2.
+**Done when:** a contributor with Bun, a Docker Engine, and no SaaS keys gets Next listening and Studio opening. Sign-in may still require Google until Phase 2.
 
 ### Phase 2 — Local auth + seed + self-approval
 
@@ -264,7 +264,7 @@ No behavior change. New people can follow the workaround below.
 
 ## Current workaround (until Phase 1–2 exist)
 
-Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and **Docker**.
+Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and a **Docker Engine** whose CLI answers `docker info`. OrbStack (this repo’s founder setup), Docker Desktop, and Colima are all fine. The Supabase CLI talks to the Docker API, not to Docker Desktop specifically.
 
 1. `bun install`
 2. Agents: `bun run skills:install` (see `AGENTS.md` / `skills-lock.json`).
@@ -310,5 +310,5 @@ Worktrees: reuse the already-running Supabase on fixed ports; do not start a sec
 | Point `bun run dev` at hosted Supabase | Rejected. Secrets in chat, shared data, Docker still needed for some people, worse agent story. |
 | Fake auth / skip Supabase locally | Rejected. Breaks `auth.users` FK and cookie/JWT behavior. |
 | Project skill under `.agents/skills` | Rejected. `AGENTS.md` forbids vendoring skills; lockfile is third-party-only. In-tree doc is the interface. |
-| Devcontainer as the default | Deferred. Optimize the native Bun+Docker path first. |
+| Devcontainer as the default | Deferred. Optimize the native Bun + Docker Engine path first (OrbStack included). |
 | Email auth in production | Rejected. Product contract is Google for owners; prospects never have accounts. |
