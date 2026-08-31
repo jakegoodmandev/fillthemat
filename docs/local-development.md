@@ -232,7 +232,7 @@ No behavior change. New people can follow the workaround below.
 - Generate `.env.local` from `supabase status` (preserves Resend / OIDC / model if already set).
 - Writes Google placeholders into `supabase/.env` when missing so `supabase start` does not require a Cloud client.
 - Cloudflare always-pass Turnstile keys and a generated `CRON_SECRET`.
-- README quickstart is `bun install && bun run setup && bun run dev`.
+- README quickstart is `bun quickstart`.
 
 Sign-in still requires Google until Phase 2.
 
@@ -270,7 +270,7 @@ Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and a **Docker Engi
 1. `bun install`
 2. Agents: `bun run skills:install` (see `AGENTS.md` / `skills-lock.json`).
 3. `bun run setup` — starts Supabase, writes `.env.local`, migrates. If something fails: `bun run doctor`.
-4. `bun run dev` → the origin setup printed (`http://127.0.0.1:3000` on the main checkout). Worktrees: `git worktree add .worktrees/<task> -b feat/<task>`, then `bun install && bun run setup && bun run dev` in that tree (new app port, same Docker). Do not `supabase stop` from a child tree.
+4. `bun run dev` → the origin setup printed (`http://127.0.0.1:30X0` on the main checkout). Worktrees: `git worktree add .worktrees/<task> -b feat/<task>`, then `bun quickstart` in that tree (new app port, same Docker). Do not `supabase stop` from a child tree.
 5. Google (currently required to sign in): create a Google Cloud **Web** OAuth client. Authorized redirect: `http://127.0.0.1:54321/auth/v1/callback`. Put real values in `supabase/.env` (setup only writes placeholders) and restart Supabase:
 
    ```

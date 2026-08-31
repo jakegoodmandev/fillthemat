@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "quickstart": "bun install && bun run setup && bun run dev",
     "dev": "bun scripts/dev-local.ts",
     "setup": "bun scripts/setup-local.ts",
     "doctor": "bun scripts/doctor-local.ts",
