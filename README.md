@@ -6,9 +6,15 @@ V1 is a multi-tenant landing page and trial-booking product. See `docs/v1-plan.m
 
 ## Local development
 
-Canonical setup for humans and coding agents: **`docs/local-development.md`**.
+Canonical setup: **`docs/local-development.md`**.
 
-That file is a plan (current founder-alpha flow vs the target `bun run setup` bootstrap). Follow the **Current workaround** section until Phases 1–2 land. Do not treat the Google Cloud + Studio `approved_at` steps as the long-term contributor contract.
+```bash
+bun install
+bun run setup
+bun run dev
+```
+
+`bun run setup` starts local Supabase (OrbStack / any Docker Engine), writes `.env.local`, and migrates. Sign-in is still Google until the local-auth follow-up; `bun run doctor` checks the stack.
 
 ## Hosted schema
 

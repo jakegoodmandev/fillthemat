@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "bun run --bun next dev",
+    "setup": "bun scripts/setup-local.ts",
+    "doctor": "bun scripts/doctor-local.ts",
     "build": "bun run --bun next build",
     "start": "bun run --bun next start",
     "check": "biome check .",
