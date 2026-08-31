@@ -5,7 +5,11 @@ export function fail(message: string): never {
   process.exit(1);
 }
 
-export function run(command: string, args: string[], env?: NodeJS.ProcessEnv) {
+export function run(
+  command: string,
+  args: string[],
+  env?: Record<string, string | undefined>,
+) {
   const result = spawnSync(command, args, {
     stdio: "inherit",
     env: env ? { ...process.env, ...env } : process.env,

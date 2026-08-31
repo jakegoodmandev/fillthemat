@@ -1,6 +1,6 @@
 # Local development onboarding
 
-This is the plan for making Fillthemat easy to run locally for humans and coding agents, and the canonical local-setup reference. Phases 1–2 (`bun run setup`, local email auth, seed) are in the stack; Phase 3 degrades Resend/chat.
+This is the plan and canonical local-setup reference. Phases 1–3 are implemented on this stack: `bun run setup`, local email auth + seed, and degradable Resend/chat.
 
 **Do not freeze the current founder-alpha workflow.** It works for one operator who already has Google Cloud, Resend, Vercel, and Cloudflare accounts. It is too many external accounts, env files, and manual Studio steps for a new contributor.
 
@@ -244,14 +244,11 @@ Sign-in still requires Google until Phase 2.
 - `ALLOW_SELF_APPROVAL` auto-approves schools created in development.
 - Slim unused Supabase services (realtime, storage, edge, vector).
 
-### Phase 3 — Degradable vendors
+### Phase 3 — Degradable vendors — **landed (this PR)**
 
-- Resend no-op in development.
-- Chat stub without OIDC.
-- Turnstile test keys in the generator.
-- Document optional `vercel env pull` and Resend for “full fidelity.”
-
-**Done when:** Book Trial confirmation works without Resend or Gateway. Chat widget does not 500.
+- Resend no-op in development when `RESEND_API_KEY` is unset (delivery marked `sent`, body logged).
+- Chat stub without `VERCEL_OIDC_TOKEN` (points the prospect at Book Trial).
+- Turnstile test keys in the generator (Phase 1).
 
 ### Phase 4 — Prove it
 
@@ -271,7 +268,7 @@ Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and a **Docker Engi
 4. `bun run dev` → `http://127.0.0.1:3000`.
 5. Sign in at `/sign-in` with `owner@local.test` / `local-dev-password`. Preview then publish `/s/demo` from the dashboard (school is pre-approved).
 6. Optional Google: Web client callback `http://127.0.0.1:54321/auth/v1/callback`, real values in `supabase/.env`, then `bun run supabase:stop && bun run setup`.
-7. Optional: `bunx vercel env pull` so `.env.local` contains `VERCEL_OIDC_TOKEN` (needed for real chat). Optional: Resend test key + `RESEND_FROM=onboarding@resend.dev` (mail only reaches the Resend account owner).
+7. Optional full fidelity: `bunx vercel env pull` for real chat; Resend test key + `RESEND_FROM=onboarding@resend.dev` for real mail (owner inbox only). Without them, chat stubs and email rows still complete.
 
 Checks: `bun run check`, `bun run test`. Do not run `bun run db:migrate:prod` unless you intend to migrate hosted data (`docs/v1-deploy-current.md`).
 

@@ -167,7 +167,8 @@ export async function seedLocal() {
   );
 }
 
-if (import.meta.main) {
+const invokedDirectly = process.argv[1]?.includes("seed-local");
+if (invokedDirectly) {
   await seedLocal();
   process.exit(0);
 }

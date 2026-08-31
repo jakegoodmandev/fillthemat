@@ -69,15 +69,12 @@ function main() {
 
   if (env.VERCEL_OIDC_TOKEN)
     console.log("ok  VERCEL_OIDC_TOKEN present (real chat)");
-  else
-    console.log(
-      "…   VERCEL_OIDC_TOKEN missing (chat needs bunx vercel env pull)",
-    );
+  else console.log("…   VERCEL_OIDC_TOKEN missing (chat uses local stub)");
 
   if (env.RESEND_API_KEY) console.log("ok  RESEND_API_KEY present");
   else
     console.log(
-      "…   RESEND_API_KEY missing (mail will fail until the noop adapter PR)",
+      "…   RESEND_API_KEY missing (email deliveries log + mark sent)",
     );
 
   if (!healthy) fail("doctor found problems.");
