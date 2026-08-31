@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { parseEnv } from "node:util";
 
 export const LOCAL_SITE_URL = "http://127.0.0.1:3000";
 export const LOCAL_DB_FALLBACK =
@@ -48,30 +49,17 @@ const KEY_ORDER = [
   "VERCEL_OIDC_TOKEN",
 ];
 
-export function parseDotenv(text: string): Record<string, string> {
+function envRecord(text: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const rawLine of text.split(/\r?\n/)) {
-    let line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    if (line.startsWith("export ")) line = line.slice("export ".length).trim();
-    const eq = line.indexOf("=");
-    if (eq <= 0) continue;
-    const key = line.slice(0, eq).trim();
-    let value = line.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    out[key] = value;
+  for (const [key, value] of Object.entries(parseEnv(text))) {
+    if (value !== undefined) out[key] = value;
   }
   return out;
 }
 
 export function readEnvFile(path: string): Record<string, string> {
   if (!existsSync(path)) return {};
-  return parseDotenv(readFileSync(path, "utf8"));
+  return envRecord(readFileSync(path, "utf8"));
 }
 
 function quote(value: string): string {
@@ -109,7 +97,7 @@ export type SupabaseStatusEnv = {
 };
 
 export function parseSupabaseStatusEnv(text: string): SupabaseStatusEnv {
-  const env = parseDotenv(text);
+  const env = parseEnv(text);
   const apiUrl =
     env.API_URL ?? env.SUPABASE_URL ?? env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey =

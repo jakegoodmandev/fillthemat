@@ -3,38 +3,25 @@ import {
   LOCAL_SITE_URL,
   mergeLocalEnv,
   missingRequiredKeys,
-  parseDotenv,
   parseSupabaseStatusEnv,
   stringifyDotenv,
   TURNSTILE_TEST_SECRET_KEY,
   TURNSTILE_TEST_SITE_KEY,
 } from "./local-env";
 
-describe("parseDotenv", () => {
-  it("parses quoted supabase status output", () => {
-    const env = parseDotenv(`
-API_URL="http://127.0.0.1:54321"
-ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.anon"
-DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
-# comment
-export STUDIO_URL="http://127.0.0.1:54323"
-`);
-    expect(env.API_URL).toBe("http://127.0.0.1:54321");
-    expect(env.ANON_KEY?.startsWith("eyJ")).toBe(true);
-    expect(env.STUDIO_URL).toBe("http://127.0.0.1:54323");
-  });
-});
-
 describe("parseSupabaseStatusEnv", () => {
   it("maps CLI names onto Next env", () => {
     const status = parseSupabaseStatusEnv(`
-API_URL=http://127.0.0.1:54321
-ANON_KEY=anon-key
+API_URL="http://127.0.0.1:54321"
+ANON_KEY="anon-key"
 DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+# comment
+export STUDIO_URL="http://127.0.0.1:54323"
 SERVICE_ROLE_KEY=service-key
 `);
     expect(status.apiUrl).toBe("http://127.0.0.1:54321");
     expect(status.publishableKey).toBe("anon-key");
+    expect(status.studioUrl).toBe("http://127.0.0.1:54323");
     expect(status.serviceRoleKey).toBe("service-key");
   });
 });

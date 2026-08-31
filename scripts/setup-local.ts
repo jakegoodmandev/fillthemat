@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import {
   mergeLocalEnv,
@@ -5,7 +6,7 @@ import {
   readEnvFile,
   writeEnvFile,
 } from "./local-env";
-import { capture, fail, run, tryCapture } from "./local-process";
+import { fail, tryCapture } from "./local-process";
 
 const ENV_LOCAL = ".env.local";
 const SUPABASE_ENV = "supabase/.env";
@@ -51,9 +52,11 @@ function main() {
   ensureGooglePlaceholder();
 
   console.log("Starting local Supabase (no-op if already running)…");
-  run("bunx", ["supabase", "start"]);
+  execFileSync("bunx", ["supabase", "start"], { stdio: "inherit" });
 
-  const statusText = capture("bunx", ["supabase", "status", "-o", "env"]);
+  const statusText = execFileSync("bunx", ["supabase", "status", "-o", "env"], {
+    encoding: "utf8",
+  });
   const status = parseSupabaseStatusEnv(statusText);
   const existing = readEnvFile(ENV_LOCAL);
   const generatedSecret = `${crypto.randomUUID()}${crypto.randomUUID()}`;
@@ -62,9 +65,13 @@ function main() {
   console.log(`Wrote ${ENV_LOCAL} (existing vendor keys preserved).`);
 
   console.log("Applying Drizzle migrations…");
-  run("bunx", ["drizzle-kit", "migrate"], {
-    DIRECT_URL: merged.DIRECT_URL,
-    DATABASE_URL: merged.DATABASE_URL,
+  execFileSync("bunx", ["drizzle-kit", "migrate"], {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      DIRECT_URL: merged.DIRECT_URL,
+      DATABASE_URL: merged.DATABASE_URL,
+    },
   });
 
   console.log("");
