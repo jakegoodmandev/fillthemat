@@ -1,5 +1,7 @@
 import {
   createAgentUIStreamResponse,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
   generateId,
   type UIMessage,
   validateUIMessages,
@@ -10,6 +12,7 @@ import { getDb } from "@/db";
 import { conversations, messages } from "@/db/schema";
 import { createBookingAgent } from "@/lib/ai/booking-agent";
 import { hashToken } from "@/lib/crypto";
+import { isLocalAiStub } from "@/lib/dev-flags";
 import { TRANSCRIPT_RETENTION_DAYS } from "@/lib/schedule/constants";
 import {
   getSchoolForLandingAccess,
@@ -134,14 +137,6 @@ export async function POST(request: Request) {
     }
 
     const catalog = await loadSchoolCatalog(school.id);
-    const agent = createBookingAgent({
-      school,
-      offerings: catalog.offerings,
-      windows: catalog.windows,
-      occurrences: catalog.occurrences,
-      faqs: catalog.faqs,
-      now,
-    });
 
     const history = stored.map((row) => ({
       id: row.messageId,
@@ -161,6 +156,70 @@ export async function POST(request: Request) {
       purgeAt,
     });
 
+    const persistAssistant = async ({
+      responseMessage,
+      isAborted,
+      outcome,
+    }: {
+      responseMessage: UIMessage;
+      isAborted: boolean;
+      outcome: { status: string };
+    }) => {
+      const completion =
+        isAborted || outcome.status === "aborted"
+          ? "aborted"
+          : outcome.status === "failed"
+            ? "error"
+            : "complete";
+      await db.insert(messages).values({
+        conversationId: conversation.id,
+        messageId: responseMessage.id,
+        role: "assistant",
+        parts: responseMessage.parts,
+        completion,
+        purgeAt,
+      });
+      await db
+        .update(conversations)
+        .set({ generatingAt: null, updatedAt: new Date() })
+        .where(eq(conversations.id, conversation.id));
+    };
+
+    if (isLocalAiStub()) {
+      const offeringNames = catalog.offerings
+        .filter((offering) => offering.active)
+        .map((offering) => offering.name);
+      const stubText =
+        offeringNames.length > 0
+          ? `Local chat stub (no VERCEL_OIDC_TOKEN). ${school.name} offers ${offeringNames.join(", ")}. Use Book Trial to confirm a slot.`
+          : `Local chat stub (no VERCEL_OIDC_TOKEN). Use Book Trial on this page to pick a time at ${school.name}.`;
+      return createUIMessageStreamResponse({
+        stream: createUIMessageStream({
+          originalMessages: uiMessages as never,
+          generateId,
+          execute: ({ writer }) => {
+            writer.write({ type: "text-start", id: "stub" });
+            writer.write({
+              type: "text-delta",
+              id: "stub",
+              delta: stubText,
+            });
+            writer.write({ type: "text-end", id: "stub" });
+          },
+          onEnd: persistAssistant,
+        }),
+      });
+    }
+
+    const agent = createBookingAgent({
+      school,
+      offerings: catalog.offerings,
+      windows: catalog.windows,
+      occurrences: catalog.occurrences,
+      faqs: catalog.faqs,
+      now,
+    });
+
     return createAgentUIStreamResponse({
       agent,
       uiMessages: uiMessages as never,
@@ -169,26 +228,7 @@ export async function POST(request: Request) {
       consumeSseStream: async ({ stream }) => {
         await stream.pipeTo(new WritableStream({ write() {} }));
       },
-      onEnd: async ({ responseMessage, isAborted, outcome }) => {
-        const completion =
-          isAborted || outcome.status === "aborted"
-            ? "aborted"
-            : outcome.status === "failed"
-              ? "error"
-              : "complete";
-        await db.insert(messages).values({
-          conversationId: conversation.id,
-          messageId: responseMessage.id,
-          role: "assistant",
-          parts: responseMessage.parts,
-          completion,
-          purgeAt,
-        });
-        await db
-          .update(conversations)
-          .set({ generatingAt: null, updatedAt: new Date() })
-          .where(eq(conversations.id, conversation.id));
-      },
+      onEnd: persistAssistant,
     });
   } catch (error) {
     await db

@@ -52,12 +52,7 @@ async function ensureAuthUser(apiUrl: string, serviceRoleKey: string) {
 
 export async function seedLocal() {
   loadEnv();
-  const statusResult = tryCapture("bunx", [
-    "supabase",
-    "status",
-    "-o",
-    "env",
-  ]);
+  const statusResult = tryCapture("bunx", ["supabase", "status", "-o", "env"]);
   if (!statusResult.ok) {
     fail(
       `Local Supabase is not running. bun run setup (or bun run supabase:start). ${statusResult.stderr}`,

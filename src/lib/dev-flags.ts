@@ -8,3 +8,13 @@ export function allowSelfApproval(): boolean {
     process.env.ALLOW_SELF_APPROVAL === "true"
   );
 }
+
+export function isLocalEmailNoop(): boolean {
+  return process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY;
+}
+
+export function isLocalAiStub(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" && !process.env.VERCEL_OIDC_TOKEN
+  );
+}

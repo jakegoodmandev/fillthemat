@@ -9,7 +9,6 @@ import {
 import { claimAppSlotForCwd, localSiteUrl } from "./local-ports";
 import { fail, tryCapture } from "./local-process";
 
-
 const ENV_LOCAL = ".env.local";
 const SUPABASE_ENV = "supabase/.env";
 
@@ -86,7 +85,6 @@ async function main() {
     },
   });
 
-
   const { seedLocal } = await import("./seed-local");
   await seedLocal();
 
@@ -102,7 +100,12 @@ async function main() {
   console.log("");
   if (!existing.VERCEL_OIDC_TOKEN && !merged.VERCEL_OIDC_TOKEN) {
     console.log(
-      "Optional: bunx vercel env pull  (OIDC token for real booking chat).",
+      "Optional: bunx vercel env pull  (real booking chat; local stub otherwise).",
+    );
+  }
+  if (!existing.RESEND_API_KEY && !merged.RESEND_API_KEY) {
+    console.log(
+      "Optional: RESEND_API_KEY + RESEND_FROM  (real mail; local noop otherwise).",
     );
   }
 }
