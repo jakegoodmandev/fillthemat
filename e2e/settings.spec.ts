@@ -1,0 +1,207 @@
+import { expect, type Page, test } from "@playwright/test";
+
+/**
+ * Owner settings UI. Requires the local stack from `docs/local-development.md`
+ * (`bun run setup` seeds owner@local.test and the "demo" school).
+ */
+
+test.describe.configure({ mode: "serial" });
+
+async function signIn(page: Page) {
+  await page.goto("/sign-in");
+  const form = page.locator("form", { hasText: "Local email auth" });
+  if ((await form.count()) === 0) {
+    test.skip(true, "Local email auth is disabled (NEXT_PUBLIC_DEV_AUTH)");
+  }
+  await form.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL(/\/dashboard/);
+}
+
+test.beforeEach(async ({ page }) => {
+  await signIn(page);
+});
+
+test("every category is deep-linkable and marked current", async ({ page }) => {
+  const sections: Array<[string, string]> = [
+    ["profile", "School details"],
+    ["offerings", "Trial classes"],
+    ["schedule", "Weekly schedule"],
+    ["pricing", "Pricing"],
+    ["faqs", "Frequently asked questions"],
+    ["agent", "Your agent"],
+    ["branding", "Branding"],
+  ];
+
+  for (const [section, heading] of sections) {
+    await page.goto(`/dashboard/settings?section=${section}`);
+    await expect(page.locator("#section-title")).toHaveText(heading);
+    await expect(
+      page
+        .getByRole("navigation", { name: "Settings categories" })
+        .locator("a[aria-current='page']"),
+    ).toHaveCount(1);
+  }
+});
+
+test("an unknown category falls back to the first one", async ({ page }) => {
+  await page.goto("/dashboard/settings?section=not-a-section");
+  await expect(page.locator("#section-title")).toHaveText("School details");
+});
+
+test("navigation keeps browser history predictable", async ({ page }) => {
+  await page.goto("/dashboard/settings");
+  await page
+    .getByRole("navigation", { name: "Settings categories" })
+    .getByRole("link", { name: /Pricing/ })
+    .click();
+  await expect(page.locator("#section-title")).toHaveText("Pricing");
+  await page.goBack();
+  await expect(page.locator("#section-title")).toHaveText("School details");
+  await page.goForward();
+  await expect(page.locator("#section-title")).toHaveText("Pricing");
+});
+
+test("invalid input shows an inline error and keeps what was typed", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/settings");
+  const name = page.getByLabel(/School name/);
+  const original = await name.inputValue();
+  const city = page.getByLabel(/^City/);
+  await name.fill("");
+  await city.fill("Brooklyn Heights");
+  await page.getByRole("button", { name: "Save School Details" }).click();
+
+  await expect(
+    page.getByText("Add the name families should hear."),
+  ).toBeVisible();
+  // Nothing the owner typed is thrown away on a failed save.
+  await expect(city).toHaveValue("Brooklyn Heights");
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(name).toBeFocused();
+
+  await name.fill(original);
+});
+
+test("a valid save reports success and clears the unsaved state", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/settings");
+  const parking = page.getByLabel(/^Parking/);
+  const value = `Lot behind the building. ${Date.now()}`;
+  await parking.fill(value);
+  await expect(
+    page.getByRole("status").filter({ hasText: "Unsaved changes" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Save School Details" }).click();
+  await expect(
+    page.getByText("School details saved. Your agent uses them now."),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByLabel(/^Parking/)).toHaveValue(value);
+});
+
+test("saving shows the value the server stored", async ({ page }) => {
+  await page.goto("/dashboard/settings");
+  await page.getByLabel(/Country code/).fill("us");
+  await page.getByRole("button", { name: "Save School Details" }).click();
+
+  await expect(page.getByLabel(/Country code/)).toHaveValue("US");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Unsaved changes" }),
+  ).toHaveCount(0);
+});
+
+test("switching categories with unsaved edits asks first", async ({ page }) => {
+  await page.goto("/dashboard/settings?section=pricing");
+  await page
+    .getByLabel(/Prices and conditions/)
+    .fill("Trial class: free for first-time students.");
+
+  await page
+    .getByRole("navigation", { name: "Settings categories" })
+    .getByRole("link", { name: /FAQs/ })
+    .click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Keep Editing" }).click();
+  await expect(page.locator("#section-title")).toHaveText("Pricing");
+
+  await page
+    .getByRole("navigation", { name: "Settings categories" })
+    .getByRole("link", { name: /FAQs/ })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Discard Changes" })
+    .click();
+  await expect(page.locator("#section-title")).toHaveText(
+    "Frequently asked questions",
+  );
+});
+
+test("adding and deleting a question requires confirmation to delete", async ({
+  page,
+}) => {
+  const question = `Is there parking for the trial? ${Date.now()}`;
+  await page.goto("/dashboard/settings?section=faqs");
+
+  const addButton = page.getByRole("button", { name: "Add a Question" });
+  if (await addButton.isVisible()) await addButton.click();
+
+  await page.getByLabel(/^Question/).fill(question);
+  await page.getByLabel(/^Answer/).fill("Yes, there is a free lot behind us.");
+  await page.getByRole("button", { name: "Add Question" }).click();
+
+  const item = page.getByRole("listitem").filter({ hasText: question });
+  await expect(item).toBeVisible();
+
+  await item.getByRole("button", { name: "Delete" }).click();
+  const dialog = page.getByRole("dialog", { name: "Delete this question?" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Delete Question" }).click();
+
+  await expect(
+    page.getByRole("listitem").filter({ hasText: question }),
+  ).toHaveCount(0);
+});
+
+test("a class time can be added, then deleted after confirming", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/settings?section=schedule");
+
+  const addButton = page.getByRole("button", { name: "Add a Class Time" });
+  if (await addButton.isVisible()) await addButton.click();
+
+  await page.getByLabel(/Day of the week/).selectOption("2");
+  await page.getByLabel(/Start time/).fill("19:15");
+  await page.getByLabel(/Class length in minutes/).fill("45");
+  await page.getByLabel(/^Internal label/).fill("Playwright temp window");
+  await page.getByRole("button", { name: "Add Class Time" }).click();
+
+  const row = page
+    .getByRole("listitem")
+    .filter({ hasText: "Playwright temp window" });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText("7:15 PM – 8:00 PM");
+
+  // Escape closes the confirmation without deleting anything.
+  await row.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(row).toBeVisible();
+
+  await row.getByRole("button", { name: "Delete" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Delete Class Time" })
+    .click();
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "Playwright temp window" }),
+  ).toHaveCount(0);
+});

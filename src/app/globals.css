@@ -8,6 +8,8 @@
 html.dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  /* Native controls (select, time, number, color) follow the dark surface. */
+  color-scheme: dark;
 }
 
 @theme inline {
