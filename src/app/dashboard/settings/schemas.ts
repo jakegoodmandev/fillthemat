@@ -187,10 +187,15 @@ export const offeringSchema = z
     },
   );
 
+// `<input type="time">` may serialize as HH:MM or HH:MM:SS depending on the
+// browser and step; seconds are accepted and ignored.
 const timeValue = z
   .string()
   .trim()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Choose a start time.")
+  .regex(
+    /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d(\.\d{1,3})?)?$/,
+    "Choose a start time.",
+  )
   .transform((value) => {
     const [hour, minute] = value.split(":");
     return Number(hour) * 60 + Number(minute);

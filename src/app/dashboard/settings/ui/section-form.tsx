@@ -49,6 +49,7 @@ export function useSettingsForm({
   const [baseline, setBaseline] = useState<Values>(initialValues);
   const [editedFields, setEditedFields] = useState<string[]>([]);
   const editedSinceSubmit = useRef<string[]>([]);
+  const submittedValues = useRef<Values>(initialValues);
   const blankRef = useRef(initialValues);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -58,6 +59,14 @@ export function useSettingsForm({
     (formData: FormData) => {
       setEditedFields([]);
       editedSinceSubmit.current = [];
+      // What actually went to the server, used as the fallback baseline when an
+      // action reports success without echoing normalized values back.
+      const submitted: Values = {};
+      for (const field of Object.keys(blankRef.current)) {
+        const raw = formData.get(field);
+        if (typeof raw === "string") submitted[field] = raw;
+      }
+      submittedValues.current = submitted;
       dispatch(formData);
     },
     [dispatch],
@@ -77,20 +86,19 @@ export function useSettingsForm({
       setBaseline(blankRef.current);
       return;
     }
-    if (state.values) {
-      const saved = state.values;
-      // Show what the server actually stored (trimmed, normalized), except for
-      // anything the owner typed while the save was in flight.
-      const typedDuringSave = editedSinceSubmit.current;
-      setValues((previous) => {
-        const next = { ...previous };
-        for (const [field, value] of Object.entries(saved)) {
-          if (!typedDuringSave.includes(field)) next[field] = value;
-        }
-        return next;
-      });
-      setBaseline((previous) => ({ ...previous, ...saved }));
-    }
+    // Prefer what the server says it stored (trimmed, normalized); fall back to
+    // what was submitted so a save can never leave the form stuck on
+    // "Unsaved changes" with a Discard that would undo a live write.
+    const saved = state.values ?? submittedValues.current;
+    const typedDuringSave = editedSinceSubmit.current;
+    setValues((previous) => {
+      const next = { ...previous };
+      for (const [field, value] of Object.entries(saved)) {
+        if (!typedDuringSave.includes(field)) next[field] = value;
+      }
+      return next;
+    });
+    setBaseline((previous) => ({ ...previous, ...saved }));
   }, [state, clearOnSuccess]);
 
   const setField = useCallback((name: string, value: string) => {

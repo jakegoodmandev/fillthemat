@@ -225,3 +225,32 @@ describe("formValues", () => {
     });
   });
 });
+
+describe("windowSchema start time", () => {
+  const base = {
+    trialOfferingId: "00000000-0000-4000-8000-000000000000",
+    dayOfWeek: "1",
+    startMinute: "18:30",
+    durationMinutes: "60",
+    capacity: "8",
+    label: "",
+  };
+
+  it("accepts the HH:MM:SS form some browsers submit", () => {
+    expect(
+      windowSchema.parse({ ...base, startMinute: "18:30:00" }).startMinute,
+    ).toBe(18 * 60 + 30);
+    expect(
+      windowSchema.parse({ ...base, startMinute: "07:05:30.500" }).startMinute,
+    ).toBe(7 * 60 + 5);
+  });
+
+  it("still rejects nonsense", () => {
+    expect(
+      windowSchema.safeParse({ ...base, startMinute: "18:30:99" }).success,
+    ).toBe(false);
+    expect(
+      windowSchema.safeParse({ ...base, startMinute: "1830" }).success,
+    ).toBe(false);
+  });
+});

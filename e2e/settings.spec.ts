@@ -88,6 +88,8 @@ test("a valid save reports success and clears the unsaved state", async ({
 }) => {
   await page.goto("/dashboard/settings");
   const parking = page.getByLabel(/^Parking/);
+  // The local Supabase stack is shared, so put this field back afterwards.
+  const original = await parking.inputValue();
   const value = `Lot behind the building. ${Date.now()}`;
   await parking.fill(value);
   await expect(
@@ -101,6 +103,42 @@ test("a valid save reports success and clears the unsaved state", async ({
 
   await page.reload();
   await expect(page.getByLabel(/^Parking/)).toHaveValue(value);
+
+  await page.getByLabel(/^Parking/).fill(original);
+  await page.getByRole("button", { name: "Save School Details" }).click();
+  await expect(
+    page.getByText("School details saved. Your agent uses them now."),
+  ).toBeVisible();
+});
+
+test("updating spots confirms the save and leaves no unsaved state", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/settings?section=schedule");
+  const row = page
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("button", { name: "Update Spots" }) })
+    .first();
+  const spots = row.getByLabel(/Spots per class/);
+  const original = await spots.inputValue();
+  const next = String(Number(original) + 1);
+
+  await spots.fill(next);
+  await row.getByRole("button", { name: "Update Spots" }).click();
+
+  await expect(
+    row.getByRole("status").filter({ hasText: "Upcoming classes now hold" }),
+  ).toBeVisible();
+  await expect(spots).toHaveValue(next);
+  // Baseline moved with the save: nothing to discard, nothing to warn about.
+  await expect(row.getByRole("button", { name: "Discard" })).toHaveCount(0);
+  await expect(
+    row.getByRole("button", { name: "Update Spots" }),
+  ).toBeDisabled();
+
+  await spots.fill(original);
+  await row.getByRole("button", { name: "Update Spots" }).click();
+  await expect(spots).toHaveValue(original);
 });
 
 test("saving shows the value the server stored", async ({ page }) => {

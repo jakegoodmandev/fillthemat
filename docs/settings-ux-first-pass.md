@@ -43,7 +43,11 @@ from a `"use server"` module made it a callable endpoint that accepted any
 ## Feedback model
 
 Actions no longer fail silently. Each returns
-`{ status, message, fieldErrors, values }`:
+`{ status, message, fieldErrors, values }`. The shared `run()` wrapper calls
+`unstable_rethrow(error)` before mapping anything to form state, so Next.js
+control flow — the `redirect()` inside `requireOwnedSchool()` when a session has
+expired, `notFound()` — still reaches the framework instead of being reported as
+a save failure. The states are:
 
 - pending — submit button shows “Saving…”, stays enabled until the request
   starts, `aria-busy` set;
@@ -51,7 +55,10 @@ Actions no longer fail silently. Each returns
   the first invalid control, everything typed is preserved;
 - server error — one plain sentence with a next step; nothing is lost;
 - success — a sentence in a polite live region, the form re-baselines to the
-  values the server stored (so “ca” becomes “CA” without looking unsaved).
+  values the server stored (so “ca” becomes “CA” without looking unsaved). An
+  action that reports success without echoing values back falls back to what was
+  submitted, so a save can never leave the form stuck on “Unsaved changes” with a
+  Discard button that would undo a write that already happened.
 
 Saves are live. No draft/publish model for settings, and the UI says so
 (“Saved changes are used by your agent right away.”).

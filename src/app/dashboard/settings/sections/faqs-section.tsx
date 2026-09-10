@@ -61,9 +61,9 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
   return (
     <div className="flex flex-col gap-6">
       <Callout>
-        Your agent uses these answers word for word as facts. Add the questions
-        parents actually ask you, and answer only what you are happy for the
-        agent to repeat.
+        Your agent treats these answers as facts about your school and writes
+        its own reply from them. Add the questions parents actually ask you, and
+        answer only what you are happy for the agent to pass on.
       </Callout>
 
       <section className="flex flex-col gap-3" aria-labelledby="faq-list">

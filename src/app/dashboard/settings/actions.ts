@@ -2,6 +2,7 @@
 
 import { and, eq, gt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import { getDb } from "@/db";
 import {
   faqs,
@@ -43,6 +44,10 @@ function nullToEmpty(value: string | null | undefined): string {
 /**
  * Every action returns a `SettingsFormState`; unexpected failures become a
  * server error the owner can act on instead of a silent no-op.
+ *
+ * Next.js control flow (the `redirect()` inside `requireOwnedSchool()` for an
+ * expired session, `notFound()`, …) is implemented by throwing, so it has to be
+ * re-thrown before anything is mapped to form state.
  */
 async function run(
   work: () => Promise<SettingsFormState>,
@@ -50,6 +55,7 @@ async function run(
   try {
     return await work();
   } catch (error) {
+    unstable_rethrow(error);
     console.error("[settings] action failed", error);
     return errorState(GENERIC_SERVER_ERROR);
   }
@@ -457,6 +463,7 @@ export async function updateWindowCapacityAction(
     revalidatePath(SETTINGS_PATH);
     return successState(
       `Saved. Upcoming classes now hold ${formatCount(capacity, "student")}.`,
+      { capacity: String(capacity) },
     );
   });
 }
