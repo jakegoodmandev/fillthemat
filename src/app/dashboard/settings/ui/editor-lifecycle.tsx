@@ -12,26 +12,20 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useDirtyState } from "./dirty-context";
+import { type EditorTarget, nextEditorAction } from "./editor-target";
 
-export type EditorTarget =
-  | { type: "closed" }
-  | { type: "create" }
-  | { type: "edit"; id: string };
-
-function sameTarget(a: EditorTarget, b: EditorTarget): boolean {
-  if (a.type !== b.type) return false;
-  if (a.type === "edit" && b.type === "edit") return a.id === b.id;
-  return true;
-}
+export type { EditorTarget } from "./editor-target";
 
 /**
  * One create/edit panel per category. Switching records (or opening Add)
- * while the open panel is dirty asks before discarding.
+ * while the open panel is dirty asks before discarding. A pending save
+ * blocks the switch entirely so the in-flight editor stays mounted.
  */
 export function useRecordEditor(category: string) {
   const { dirtyKeys } = useDirtyState();
   const [open, setOpen] = useState<EditorTarget>({ type: "closed" });
   const [pendingTarget, setPendingTarget] = useState<EditorTarget | null>(null);
+  const [saving, setSaving] = useState(false);
   const categoryDirty = dirtyKeys.some((key) => key.startsWith(`${category}:`));
 
   const apply = useCallback((target: EditorTarget) => {
@@ -41,14 +35,18 @@ export function useRecordEditor(category: string) {
 
   const requestOpen = useCallback(
     (target: EditorTarget) => {
-      if (sameTarget(open, target)) return;
-      if (categoryDirty) {
+      const action = nextEditorAction(open, target, {
+        dirty: categoryDirty,
+        saving,
+      });
+      if (action === "noop") return;
+      if (action === "confirm") {
         setPendingTarget(target);
         return;
       }
       apply(target);
     },
-    [apply, categoryDirty, open],
+    [apply, categoryDirty, open, saving],
   );
 
   const requestClose = useCallback(() => {
@@ -64,8 +62,12 @@ export function useRecordEditor(category: string) {
   }, []);
 
   const discardAndSwitch = useCallback(() => {
+    if (saving) {
+      setPendingTarget(null);
+      return;
+    }
     if (pendingTarget) apply(pendingTarget);
-  }, [apply, pendingTarget]);
+  }, [apply, pendingTarget, saving]);
 
   const isEditing = (id: string) => open.type === "edit" && open.id === id;
   const isCreating = open.type === "create";
@@ -73,6 +75,8 @@ export function useRecordEditor(category: string) {
   return {
     open,
     pendingTarget,
+    saving,
+    setSaving,
     requestOpen,
     requestClose,
     closeImmediate,

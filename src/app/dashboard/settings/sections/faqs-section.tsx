@@ -100,12 +100,14 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
                 key={faq.id}
                 faq={faq}
                 editing={editor.isEditing(faq.id)}
+                categorySaving={editor.saving}
                 onEdit={() => {
                   setAnnouncement(null);
                   editor.requestOpen({ type: "edit", id: faq.id });
                 }}
                 onCancel={editor.requestClose}
                 onSuccess={(state, meta) => onEditSuccess(faq.id, state, meta)}
+                onPendingChange={editor.setSaving}
                 editRef={(node) => {
                   if (node && focusId === faq.id) {
                     node.focus();
@@ -130,6 +132,7 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
             initialQuestion={createQuestion}
             onCancel={editor.requestClose}
             onSuccess={onCreateSuccess}
+            onPendingChange={editor.setSaving}
           />
         </div>
       ) : (
@@ -139,6 +142,7 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
             variant="outline"
             className="self-start"
             onClick={() => openAdd()}
+            disabled={editor.saving}
           >
             Add a Question
           </Button>
@@ -152,6 +156,7 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
                     variant="link"
                     className="h-auto px-0 text-left text-sm whitespace-normal"
                     onClick={() => openAdd(question)}
+                    disabled={editor.saving}
                   >
                     {question}
                   </Button>
@@ -163,7 +168,7 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
       )}
 
       <DiscardEditsDialog
-        open={editor.pendingTarget !== null}
+        open={editor.pendingTarget !== null && !editor.saving}
         onKeepEditing={editor.keepEditing}
         onDiscard={editor.discardAndSwitch}
       />
@@ -174,20 +179,22 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
 function FaqRow({
   faq,
   editing,
+  categorySaving,
   onEdit,
   onCancel,
   onSuccess,
+  onPendingChange,
   editRef,
 }: {
   faq: FaqItem;
   editing: boolean;
+  categorySaving: boolean;
   onEdit: () => void;
   onCancel: () => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
+  onPendingChange: (pending: boolean) => void;
   editRef: (node: HTMLButtonElement | null) => void;
 }) {
-  const [saving, setSaving] = useState(false);
-
   return (
     <li id={`faq-${faq.id}`} className="flex flex-col gap-3 py-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -201,7 +208,7 @@ function FaqRow({
             variant="outline"
             size="sm"
             onClick={onEdit}
-            disabled={saving}
+            disabled={categorySaving}
             aria-expanded={editing}
             aria-controls={editing ? `faq-editor-${faq.id}` : undefined}
           >
@@ -213,7 +220,7 @@ function FaqRow({
             label="Delete"
             pendingLabel="Deleting…"
             variant="danger"
-            disabled={saving}
+            disabled={editing && categorySaving}
             className="items-end"
             confirm={{
               title: "Delete this question?",
@@ -233,7 +240,7 @@ function FaqRow({
           faq={faq}
           onCancel={onCancel}
           onSuccess={onSuccess}
-          onPendingChange={setSaving}
+          onPendingChange={onPendingChange}
         />
       ) : (
         <details className="group">
@@ -256,10 +263,12 @@ function CreateFaqForm({
   initialQuestion = "",
   onCancel,
   onSuccess,
+  onPendingChange,
 }: {
   initialQuestion?: string;
   onCancel: () => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
+  onPendingChange: (pending: boolean) => void;
 }) {
   const {
     state,
@@ -277,6 +286,11 @@ function CreateFaqForm({
     clearOnSuccess: true,
     onSuccess,
   });
+
+  useEffect(() => {
+    onPendingChange(pending);
+    return () => onPendingChange(false);
+  }, [pending, onPendingChange]);
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-5">

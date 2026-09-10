@@ -125,7 +125,12 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
           <EmptyState
             title="No trial classes yet"
             action={
-              <Button type="button" variant="outline" onClick={openAdd}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={openAdd}
+                disabled={editor.saving}
+              >
                 Add a Trial Class
               </Button>
             }
@@ -139,6 +144,7 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
                 key={offering.id}
                 offering={offering}
                 editing={editor.isEditing(offering.id)}
+                categorySaving={editor.saving}
                 onEdit={() => {
                   setAnnouncement(null);
                   editor.requestOpen({ type: "edit", id: offering.id });
@@ -147,6 +153,7 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
                 onSuccess={(state, meta) =>
                   onEditSuccess(offering.id, state, meta)
                 }
+                onPendingChange={editor.setSaving}
                 editRef={(node) => {
                   if (node && focusId === offering.id) {
                     node.focus();
@@ -164,18 +171,24 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
           <CreateOfferingForm
             onCancel={editor.requestClose}
             onSuccess={onCreateSuccess}
+            onPendingChange={editor.setSaving}
           />
         </div>
       ) : (
         <div>
-          <Button type="button" variant="outline" onClick={openAdd}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={openAdd}
+            disabled={editor.saving}
+          >
             Add a Trial Class
           </Button>
         </div>
       )}
 
       <DiscardEditsDialog
-        open={editor.pendingTarget !== null}
+        open={editor.pendingTarget !== null && !editor.saving}
         onKeepEditing={editor.keepEditing}
         onDiscard={editor.discardAndSwitch}
       />
@@ -186,19 +199,22 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
 function OfferingRow({
   offering,
   editing,
+  categorySaving,
   onEdit,
   onCancel,
   onSuccess,
+  onPendingChange,
   editRef,
 }: {
   offering: OfferingItem;
   editing: boolean;
+  categorySaving: boolean;
   onEdit: () => void;
   onCancel: () => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
+  onPendingChange: (pending: boolean) => void;
   editRef: (node: HTMLButtonElement | null) => void;
 }) {
-  const [saving, setSaving] = useState(false);
   const bookable = offering.active && offering.activeWindowCount > 0;
 
   return (
@@ -264,7 +280,7 @@ function OfferingRow({
             variant="outline"
             size="sm"
             onClick={onEdit}
-            disabled={saving}
+            disabled={categorySaving}
             aria-expanded={editing}
             aria-controls={
               editing ? `offering-editor-${offering.id}` : undefined
@@ -278,7 +294,7 @@ function OfferingRow({
             extraFields={{ active: offering.active ? "false" : "true" }}
             label={offering.active ? "Stop Offering" : "Offer Again"}
             pendingLabel={offering.active ? "Turning off…" : "Turning on…"}
-            disabled={saving}
+            disabled={editing && categorySaving}
             className="sm:items-end"
             confirm={
               offering.active
@@ -302,7 +318,7 @@ function OfferingRow({
           offering={offering}
           onCancel={onCancel}
           onSuccess={onSuccess}
-          onPendingChange={setSaving}
+          onPendingChange={onPendingChange}
         />
       ) : null}
     </li>
@@ -312,9 +328,11 @@ function OfferingRow({
 function CreateOfferingForm({
   onCancel,
   onSuccess,
+  onPendingChange,
 }: {
   onCancel: () => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
+  onPendingChange: (pending: boolean) => void;
 }) {
   const {
     state,
@@ -332,6 +350,11 @@ function CreateOfferingForm({
     clearOnSuccess: true,
     onSuccess,
   });
+
+  useEffect(() => {
+    onPendingChange(pending);
+    return () => onPendingChange(false);
+  }, [pending, onPendingChange]);
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-5">
