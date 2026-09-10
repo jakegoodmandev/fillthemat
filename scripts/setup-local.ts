@@ -102,6 +102,8 @@ async function main() {
       "Optional: RESEND_API_KEY + RESEND_FROM  (real mail; local noop otherwise).",
     );
   }
+  // seedLocal() leaves the postgres-js pool open; without this, bun never exits.
+  process.exit(0);
 }
 
 main().catch((error) => {
