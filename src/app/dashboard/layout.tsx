@@ -11,7 +11,7 @@ export default async function DashboardLayout({
   const { school } = await requireOwnedSchool();
 
   return (
-    <div className="dashboard flex min-h-dvh flex-col md:flex-row">
+    <div className="dashboard flex min-h-dvh flex-1 flex-col md:flex-row">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-3 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
