@@ -57,6 +57,19 @@ export function useRecordEditor(category: string) {
     apply({ type: "closed" });
   }, [apply]);
 
+  /** Uses the form's own dirty flag so idle Cancel never depends on dirtyKeys. */
+  const requestCancel = useCallback(
+    (formDirty: boolean) => {
+      if (saving) return;
+      if (formDirty) {
+        setPendingTarget({ type: "closed" });
+        return;
+      }
+      apply({ type: "closed" });
+    },
+    [apply, saving],
+  );
+
   const keepEditing = useCallback(() => {
     setPendingTarget(null);
   }, []);
@@ -79,6 +92,7 @@ export function useRecordEditor(category: string) {
     setSaving,
     requestOpen,
     requestClose,
+    requestCancel,
     closeImmediate,
     keepEditing,
     discardAndSwitch,

@@ -153,7 +153,7 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
                   setAnnouncement(null);
                   editor.requestOpen({ type: "edit", id: offering.id });
                 }}
-                onCancel={editor.requestClose}
+                onCancel={editor.requestCancel}
                 onSuccess={(state, meta) =>
                   onEditSuccess(offering.id, state, meta)
                 }
@@ -173,7 +173,7 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
       {editor.isCreating ? (
         <div ref={nameRef}>
           <CreateOfferingForm
-            onCancel={editor.requestClose}
+            onCancel={editor.requestCancel}
             onSuccess={onCreateSuccess}
             onPendingChange={editor.setSaving}
           />
@@ -214,7 +214,7 @@ function OfferingRow({
   editing: boolean;
   categorySaving: boolean;
   onEdit: () => void;
-  onCancel: () => void;
+  onCancel: (dirty: boolean) => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
   editRef: (node: HTMLButtonElement | null) => void;
@@ -328,7 +328,7 @@ function CreateOfferingForm({
   onSuccess,
   onPendingChange,
 }: {
-  onCancel: () => void;
+  onCancel: (dirty: boolean) => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -369,7 +369,7 @@ function CreateOfferingForm({
         savingLabel="Adding…"
         pending={pending}
         dirty={dirty}
-        onCancel={onCancel}
+        onCancel={() => onCancel(dirty)}
         state={state}
         idleHint="New trial classes are offered to families as soon as they are added."
       />
@@ -384,7 +384,7 @@ function EditOfferingForm({
   onPendingChange,
 }: {
   offering: OfferingItem;
-  onCancel: () => void;
+  onCancel: (dirty: boolean) => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -435,7 +435,7 @@ function EditOfferingForm({
         savingLabel="Saving…"
         pending={pending}
         dirty={dirty}
-        onCancel={onCancel}
+        onCancel={() => onCancel(dirty)}
         state={state}
         idleHint="Saved changes are used by your agent right away."
       />

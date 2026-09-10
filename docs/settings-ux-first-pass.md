@@ -68,7 +68,9 @@ from a `"use server"` module made it a callable endpoint that accepted any
 - Opening Edit loads every supported saved field from the record DTO, including
   values omitted or truncated in the summary.
 - Editors have a contextual heading, a primary save action, and Cancel. Cancel
-  closes without writing; if dirty, confirm discard.
+  closes without writing; if dirty, confirm discard. Idle Cancel uses the
+  form's own dirty flag (not `dirtyKeys`) so a clean panel never shows the
+  discard dialog.
 - Save disables while pending, preserves input on validation/server failure,
   and focuses the first invalid control. Success is never optimistic.
 - After confirmed success, the row updates from normalized server values.

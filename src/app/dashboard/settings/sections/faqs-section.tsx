@@ -109,7 +109,7 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
                   setAnnouncement(null);
                   editor.requestOpen({ type: "edit", id: faq.id });
                 }}
-                onCancel={editor.requestClose}
+                onCancel={editor.requestCancel}
                 onSuccess={(state, meta) => onEditSuccess(faq.id, state, meta)}
                 onPendingChange={editor.setSaving}
                 editRef={(node) => {
@@ -134,7 +134,7 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
           <CreateFaqForm
             key={createQuestion || "blank"}
             initialQuestion={createQuestion}
-            onCancel={editor.requestClose}
+            onCancel={editor.requestCancel}
             onSuccess={onCreateSuccess}
             onPendingChange={editor.setSaving}
           />
@@ -194,7 +194,7 @@ function FaqRow({
   editing: boolean;
   categorySaving: boolean;
   onEdit: () => void;
-  onCancel: () => void;
+  onCancel: (dirty: boolean) => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
   editRef: (node: HTMLButtonElement | null) => void;
@@ -270,7 +270,7 @@ function CreateFaqForm({
   onPendingChange,
 }: {
   initialQuestion?: string;
-  onCancel: () => void;
+  onCancel: (dirty: boolean) => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -311,7 +311,7 @@ function CreateFaqForm({
         savingLabel="Adding…"
         pending={pending}
         dirty={dirty}
-        onCancel={onCancel}
+        onCancel={() => onCancel(dirty)}
         state={state}
         idleHint="Your agent can use a new answer as soon as it is added."
       />
@@ -326,7 +326,7 @@ function EditFaqForm({
   onPendingChange,
 }: {
   faq: FaqItem;
-  onCancel: () => void;
+  onCancel: (dirty: boolean) => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -377,7 +377,7 @@ function EditFaqForm({
         savingLabel="Saving…"
         pending={pending}
         dirty={dirty}
-        onCancel={onCancel}
+        onCancel={() => onCancel(dirty)}
         state={state}
         idleHint="Saved changes are used by your agent right away."
       />
