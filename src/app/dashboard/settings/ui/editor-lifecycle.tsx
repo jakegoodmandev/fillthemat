@@ -12,7 +12,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useDirtyState } from "./dirty-context";
-import { type EditorTarget, nextEditorAction } from "./editor-target";
+import {
+  cancelEditorAction,
+  type EditorTarget,
+  nextEditorAction,
+} from "./editor-target";
 
 export type { EditorTarget } from "./editor-target";
 
@@ -49,19 +53,16 @@ export function useRecordEditor(category: string) {
     [apply, categoryDirty, open, saving],
   );
 
-  const requestClose = useCallback(() => {
-    requestOpen({ type: "closed" });
-  }, [requestOpen]);
-
   const closeImmediate = useCallback(() => {
     apply({ type: "closed" });
   }, [apply]);
 
-  /** Uses the form's own dirty flag so idle Cancel never depends on dirtyKeys. */
+  /** Idle Cancel closes immediately and never reads dirtyKeys. */
   const requestCancel = useCallback(
     (formDirty: boolean) => {
-      if (saving) return;
-      if (formDirty) {
+      const action = cancelEditorAction(formDirty, saving);
+      if (action === "noop") return;
+      if (action === "confirm") {
         setPendingTarget({ type: "closed" });
         return;
       }
@@ -91,7 +92,6 @@ export function useRecordEditor(category: string) {
     saving,
     setSaving,
     requestOpen,
-    requestClose,
     requestCancel,
     closeImmediate,
     keepEditing,

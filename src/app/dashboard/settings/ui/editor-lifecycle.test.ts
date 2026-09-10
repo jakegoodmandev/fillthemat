@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { type EditorTarget, nextEditorAction } from "./editor-target";
+import {
+  cancelEditorAction,
+  type EditorTarget,
+  nextEditorAction,
+} from "./editor-target";
 
 const closed: EditorTarget = { type: "closed" };
 const create: EditorTarget = { type: "create" };
@@ -41,5 +45,20 @@ describe("nextEditorAction", () => {
     expect(
       nextEditorAction(editA, closed, { dirty: false, saving: false }),
     ).toBe("apply");
+  });
+});
+
+describe("cancelEditorAction", () => {
+  it("closes an idle editor without confirming", () => {
+    expect(cancelEditorAction(false, false)).toBe("close");
+  });
+
+  it("confirms only when the form itself is dirty", () => {
+    expect(cancelEditorAction(true, false)).toBe("confirm");
+  });
+
+  it("does not unmount while a save is pending", () => {
+    expect(cancelEditorAction(false, true)).toBe("noop");
+    expect(cancelEditorAction(true, true)).toBe("noop");
   });
 });

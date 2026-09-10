@@ -23,3 +23,13 @@ export function nextEditorAction(
   if (dirty) return "confirm";
   return "apply";
 }
+
+/** Idle Cancel must not consult category dirtyKeys. */
+export function cancelEditorAction(
+  formDirty: boolean,
+  saving: boolean,
+): "noop" | "confirm" | "close" {
+  if (saving) return "noop";
+  if (formDirty) return "confirm";
+  return "close";
+}
