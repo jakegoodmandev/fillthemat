@@ -87,9 +87,11 @@ html.dark {
 }
 
 .dashboard {
-  flex: 1 1 auto;
+  box-sizing: border-box;
+  flex: 1 0 auto;
+  width: 100%;
   min-height: 100dvh;
-  background: var(--background);
+  background-color: #161618;
   color: var(--foreground);
 }
 
@@ -129,10 +131,17 @@ body {
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
-html:has(.dashboard),
-html:has(.dashboard) body {
-  background: #161618;
+html:has(.dashboard) {
+  height: 100%;
   min-height: 100dvh;
+  background-color: #161618;
+}
+
+html:has(.dashboard) body {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  background-color: #161618;
 }
 
 @media (prefers-reduced-motion: reduce) {

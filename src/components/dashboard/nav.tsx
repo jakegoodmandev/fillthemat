@@ -20,7 +20,7 @@ export function DashboardNav({ schoolName }: { schoolName: string }) {
   const pathname = usePathname();
 
   return (
-    <header className="border-b border-border md:flex md:w-52 md:shrink-0 md:flex-col md:self-stretch md:border-r md:border-b-0">
+    <header className="border-b border-border md:flex md:h-full md:min-h-dvh md:w-52 md:shrink-0 md:flex-col md:border-r md:border-b-0">
       <p className="truncate px-4 py-3 text-sm font-medium md:px-4 md:pt-5 md:pb-3">
         {schoolName}
       </p>
