@@ -335,6 +335,40 @@ test("switching records while dirty asks before discarding", async ({
   ).toBeVisible();
 });
 
+test("cancel on a clean FAQ editor closes immediately without asking", async ({
+  page,
+}) => {
+  const question = `Idle cancel FAQ ${Date.now()}`;
+  await page.goto("/dashboard/settings?section=faqs");
+  const addButton = page.getByRole("button", { name: "Add a Question" });
+  if (await addButton.isVisible()) await addButton.click();
+
+  await page.getByLabel(/^Question/).fill(question);
+  await page.getByLabel(/^Answer/).fill("Temporary.");
+  await page.getByRole("button", { name: "Add Question" }).click();
+
+  const item = page.getByRole("listitem").filter({ hasText: question });
+  await expect(item).toBeVisible();
+  await item.getByRole("button", { name: "Edit" }).click();
+  await expect(
+    page.getByRole("button", { name: "Save Changes" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save Changes" })).toHaveCount(
+    0,
+  );
+  await expect(item.getByRole("button", { name: "Edit" })).toBeVisible();
+
+  await item.getByRole("button", { name: "Delete" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Delete Question" })
+    .click();
+});
+
 test("an FAQ can be edited without deleting it", async ({ page }) => {
   const question = `Parking for the trial? ${Date.now()}`;
   await page.goto("/dashboard/settings?section=faqs");
