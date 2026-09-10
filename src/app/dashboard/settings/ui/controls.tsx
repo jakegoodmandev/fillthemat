@@ -1,19 +1,20 @@
 "use client";
 
 import { useId } from "react";
+import { cn } from "@/lib/utils";
 
 export const inputClass =
-  "w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 transition-colors duration-150 motion-reduce:transition-none hover:border-zinc-700 focus-visible:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/60 disabled:cursor-not-allowed disabled:border-zinc-900 disabled:bg-zinc-900/60 disabled:text-zinc-400";
+  "w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors hover:border-ring/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
-export const invalidInputClass = "border-red-500/70 hover:border-red-500/70";
+export const invalidInputClass = "border-destructive hover:border-destructive";
 
 export const buttonBase =
-  "inline-flex h-10 touch-manipulation items-center justify-center gap-2 rounded-full px-4 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex h-9 touch-manipulation items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer";
 
-export const primaryButtonClass = `${buttonBase} bg-zinc-100 text-zinc-950 hover:bg-white`;
-export const secondaryButtonClass = `${buttonBase} border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:bg-zinc-900`;
-export const dangerButtonClass = `${buttonBase} border border-red-900 text-red-300 hover:border-red-700 hover:bg-red-950/50`;
-export const quietButtonClass = `${buttonBase} text-zinc-300 underline underline-offset-4 hover:text-zinc-100 px-2`;
+export const primaryButtonClass = `${buttonBase} bg-primary text-primary-foreground hover:bg-primary/90`;
+export const secondaryButtonClass = `${buttonBase} border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80`;
+export const dangerButtonClass = `${buttonBase} bg-destructive text-destructive-foreground hover:bg-destructive/90`;
+export const quietButtonClass = `${buttonBase} text-muted-foreground hover:text-foreground underline underline-offset-4 px-2`;
 
 type BaseFieldProps = {
   label: string;
@@ -75,17 +76,17 @@ function FieldShell({
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <label
           htmlFor={controlId}
-          className="text-sm font-medium text-zinc-200"
+          className="text-sm font-medium text-foreground"
         >
           {label}
           {required ? (
-            <span className="ml-1 text-zinc-500" aria-hidden="true">
+            <span className="ml-1 text-muted-foreground" aria-hidden="true">
               *
             </span>
           ) : null}
         </label>
         {badge ? (
-          <span className="rounded-full border border-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">
+          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground bg-muted/30">
             {badge}
           </span>
         ) : null}
@@ -94,14 +95,19 @@ function FieldShell({
       {helper || count ? (
         <div className="flex flex-wrap items-baseline justify-between gap-x-3">
           {helper ? (
-            <p id={helperId} className="text-xs leading-relaxed text-zinc-400">
+            <p
+              id={helperId}
+              className="text-xs leading-relaxed text-muted-foreground"
+            >
               {helper}
             </p>
           ) : null}
           {count ? (
             <p
               className={`text-xs tabular-nums ${
-                count.value > count.max ? "text-red-400" : "text-zinc-500"
+                count.value > count.max
+                  ? "text-destructive font-medium"
+                  : "text-muted-foreground"
               }`}
             >
               {count.value.toLocaleString("en-US")} /{" "}
@@ -111,7 +117,7 @@ function FieldShell({
         </div>
       ) : null}
       {error ? (
-        <p id={errorId} className="text-xs font-medium text-red-400">
+        <p id={errorId} className="text-xs font-medium text-destructive">
           {error}
         </p>
       ) : null}
@@ -190,7 +196,7 @@ export function TextField({
         aria-describedby={describedBy(helperId, helper, errorId, error)}
         aria-invalid={error ? true : undefined}
         aria-required={required || undefined}
-        className={`${inputClass} ${error ? invalidInputClass : ""} ${className ?? ""}`}
+        className={cn(inputClass, error && invalidInputClass, className)}
       />
     </FieldShell>
   );
@@ -247,7 +253,7 @@ export function TextAreaField({
         aria-describedby={describedBy(helperId, helper, errorId, error)}
         aria-invalid={error ? true : undefined}
         aria-required={required || undefined}
-        className={`${inputClass} resize-y ${error ? invalidInputClass : ""}`}
+        className={cn(inputClass, "resize-y", error && invalidInputClass)}
       />
     </FieldShell>
   );
@@ -290,7 +296,11 @@ export function SelectField({
         aria-describedby={describedBy(helperId, helper, errorId, error)}
         aria-invalid={error ? true : undefined}
         aria-required={required || undefined}
-        className={`${inputClass} bg-zinc-950 text-zinc-100 ${error ? invalidInputClass : ""}`}
+        className={cn(
+          inputClass,
+          "bg-background text-foreground",
+          error && invalidInputClass,
+        )}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -312,12 +322,12 @@ export function FieldGroup({
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className="flex flex-col gap-4 rounded-xl border border-zinc-900 bg-zinc-950/40 p-4 sm:p-5">
-      <legend className="px-1 text-sm font-semibold text-zinc-100">
+    <fieldset className="flex flex-col gap-4 rounded-lg border border-border bg-card/40 p-4 sm:p-5">
+      <legend className="px-1 text-sm font-semibold text-foreground">
         {title}
       </legend>
       {description ? (
-        <p className="-mt-2 text-sm leading-relaxed text-zinc-400 text-pretty">
+        <p className="-mt-2 text-xs leading-relaxed text-muted-foreground text-pretty">
           {description}
         </p>
       ) : null}
@@ -336,15 +346,18 @@ export function Callout({
   children: React.ReactNode;
 }) {
   const tones = {
-    neutral: "border-zinc-800 bg-zinc-900/40 text-zinc-300",
-    locked: "border-zinc-800 bg-zinc-900/60 text-zinc-300",
-    warning: "border-amber-900/70 bg-amber-950/30 text-amber-200",
+    neutral: "border-border bg-card text-muted-foreground",
+    locked: "border-border bg-muted/40 text-muted-foreground",
+    warning: "border-amber-800/40 bg-amber-950/20 text-amber-200",
   } as const;
   return (
     <div
-      className={`rounded-xl border px-4 py-3 text-sm leading-relaxed text-pretty ${tones[tone]}`}
+      className={cn(
+        "rounded-lg border px-4 py-3 text-sm leading-relaxed text-pretty",
+        tones[tone],
+      )}
     >
-      {title ? <p className="font-medium">{title}</p> : null}
+      {title ? <p className="font-medium text-foreground">{title}</p> : null}
       <div className={title ? "mt-1" : undefined}>{children}</div>
     </div>
   );
@@ -358,14 +371,17 @@ export function Badge({
   children: React.ReactNode;
 }) {
   const tones = {
-    neutral: "border-zinc-700 text-zinc-300",
-    muted: "border-zinc-800 text-zinc-500",
-    active: "border-emerald-800 text-emerald-300",
-    warning: "border-amber-800 text-amber-300",
+    neutral: "border-border text-foreground bg-muted/40",
+    muted: "border-border text-muted-foreground bg-muted/20",
+    active: "border-emerald-800/40 bg-emerald-950/60 text-emerald-300",
+    warning: "border-amber-800/40 bg-amber-950/60 text-amber-300",
   } as const;
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${tones[tone]}`}
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap",
+        tones[tone],
+      )}
     >
       {children}
     </span>
@@ -382,9 +398,9 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-zinc-800 px-4 py-6 sm:px-6">
-      <p className="text-sm font-medium text-zinc-200">{title}</p>
-      <p className="max-w-prose text-sm leading-relaxed text-zinc-400 text-pretty">
+    <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border px-4 py-6 sm:px-6">
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="max-w-prose text-sm leading-relaxed text-muted-foreground text-pretty">
         {children}
       </p>
       {action}

@@ -50,18 +50,14 @@ export function BrandingSection({
     : "#111111";
 
   return (
-    <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <form ref={formRef} action={formAction} className="flex flex-col gap-6">
         <Callout>
-          Uploading files is not available yet. Host your logo somewhere public
-          — your website, a storage bucket, a design tool — and paste the direct
-          image address here.
+          Paste a direct image URL (https://) for your logo. File upload is not
+          yet available.
         </Callout>
 
-        <FieldGroup
-          title="Logo and color"
-          description="Families see these on the page where they book a trial class."
-        >
+        <FieldGroup title="Logo and color">
           <TextField
             label="Logo image address"
             name="logoUrl"
@@ -71,14 +67,14 @@ export function BrandingSection({
             value={values.logoUrl}
             onValueChange={(value) => setField("logoUrl", value)}
             error={errorFor("logoUrl")}
-            helper="Must start with https:// and point straight at the image file, ending in .png, .jpg, or .svg."
+            helper="Direct HTTPS image link (.png, .jpg, .svg)."
             placeholder="https://example.com/logo.png…"
           />
 
           <div className="flex min-w-0 flex-col gap-1.5">
             <label
               htmlFor={hexId}
-              className="text-sm font-medium text-zinc-200"
+              className="text-sm font-medium text-foreground"
             >
               Accent color
             </label>
@@ -90,7 +86,7 @@ export function BrandingSection({
                 onChange={(event) =>
                   setField("primaryColor", event.target.value.toUpperCase())
                 }
-                className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-zinc-800 bg-zinc-950 p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/60"
+                className="h-9 w-12 shrink-0 cursor-pointer rounded-md border border-input bg-background p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <input
                 id={hexId}
@@ -108,14 +104,13 @@ export function BrandingSection({
                 className={`${inputClass} font-mono uppercase ${colorError ? invalidInputClass : ""}`}
               />
             </div>
-            <p id={`${hexId}-helper`} className="text-xs text-zinc-400">
-              A 6-digit hex color, such as #1E3A8A. Leave it blank to use the
-              default dark accent.
+            <p id={`${hexId}-helper`} className="text-xs text-muted-foreground">
+              6-digit hex color, e.g. #1E3A8A.
             </p>
             {colorError ? (
               <p
                 id={`${hexId}-error`}
-                className="text-xs font-medium text-red-400"
+                className="text-xs font-medium text-destructive"
               >
                 {colorError}
               </p>
@@ -129,14 +124,14 @@ export function BrandingSection({
           dirty={dirty}
           onDiscard={reset}
           state={state}
-          idleHint="Saved branding appears on your public page right away."
+          idleHint="Saved branding takes effect immediately."
         />
       </form>
 
       <PreviewPanel
         title="Public page preview"
         dirty={dirty}
-        note="Representative view of your booking page — spacing and colors on the live page may differ. Nothing here creates a booking."
+        note="Representative view of your page."
       >
         <PublicPagePreview
           schoolName={schoolName}

@@ -12,9 +12,21 @@ if (port === undefined) {
 }
 
 const extra = process.argv.slice(2);
+const hasEngineFlag = extra.includes("--turbo") || extra.includes("--webpack");
+const engineFlags = hasEngineFlag ? [] : ["--webpack"];
+
 const result = spawnSync(
   "bun",
-  ["run", "--bun", "next", "dev", "--port", String(port), ...extra],
+  [
+    "run",
+    "--bun",
+    "next",
+    "dev",
+    "--port",
+    String(port),
+    ...engineFlags,
+    ...extra,
+  ],
   {
     stdio: "inherit",
     env: { ...process.env, PORT: String(port) },

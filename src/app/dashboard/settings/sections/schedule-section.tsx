@@ -113,8 +113,7 @@ export function ScheduleSection({
           </Link>
         }
       >
-        Every class time belongs to a trial class, so your agent knows who the
-        time is for and which ages may book it.
+        Every class time belongs to a trial class.
       </EmptyState>
     );
   }
@@ -122,23 +121,21 @@ export function ScheduleSection({
   return (
     <div className="flex flex-col gap-6">
       <Callout>
-        Times are in your school time zone ({timezoneLabel}). Your agent only
-        offers times that come from this schedule and never holds a spot on its
-        own.
+        Class times are in your school time zone ({timezoneLabel}).
       </Callout>
 
       <section className="flex flex-col gap-4" aria-labelledby="schedule-list">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3
             id="schedule-list"
-            className="text-sm font-semibold text-zinc-100"
+            className="text-sm font-semibold text-foreground"
           >
             Weekly class times
           </h3>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             {windows.length === 0
               ? "None yet"
-              : `${formatCount(windows.length, "class time")} · ${activeCount} open to families`}
+              : `${formatCount(windows.length, "class time")} · ${activeCount} open`}
           </p>
         </div>
 
@@ -157,8 +154,7 @@ export function ScheduleSection({
               )
             }
           >
-            Add the weekly times a family can try a class. Each one repeats
-            every week until you turn it off.
+            Add the weekly times a family can try a class.
           </EmptyState>
         ) : (
           <div className="flex flex-col gap-5">
@@ -166,7 +162,7 @@ export function ScheduleSection({
               windows.some((item) => item.dayOfWeek === day),
             ).map((day) => (
               <section key={day} className="flex flex-col gap-2">
-                <h4 className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                   {DAY_NAMES[day]}
                 </h4>
                 <ul className="flex flex-col gap-3">
@@ -185,10 +181,7 @@ export function ScheduleSection({
       {adding ? (
         <form ref={formRef} action={formAction} className="flex flex-col gap-6">
           <div ref={addRef}>
-            <FieldGroup
-              title="Add a class time"
-              description="Class times repeat weekly. You can change the number of spots later, and turn a time off when you stop running it."
-            >
+            <FieldGroup title="Add a class time">
               <SelectField
                 label="Trial class"
                 name="trialOfferingId"
@@ -196,7 +189,6 @@ export function ScheduleSection({
                 value={values.trialOfferingId}
                 onValueChange={(value) => setField("trialOfferingId", value)}
                 error={errorFor("trialOfferingId")}
-                helper="Which trial class runs at this time."
                 options={offerings.map((offering) => ({
                   value: offering.id,
                   label: offering.active
@@ -212,7 +204,6 @@ export function ScheduleSection({
                   onValueChange={(value) => setField("dayOfWeek", value)}
                   error={errorFor("dayOfWeek")}
                   options={DAY_OPTIONS}
-                  helper="The class repeats on this day every week."
                 />
                 <TextField
                   label="Start time"
@@ -221,7 +212,7 @@ export function ScheduleSection({
                   value={values.startMinute}
                   onValueChange={(value) => setField("startMinute", value)}
                   error={errorFor("startMinute")}
-                  helper={`Local time in ${timezoneLabel}.`}
+                  helper={`Time in ${timezoneLabel}.`}
                 />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -236,7 +227,6 @@ export function ScheduleSection({
                   value={values.durationMinutes}
                   onValueChange={(value) => setField("durationMinutes", value)}
                   error={errorFor("durationMinutes")}
-                  helper={`Between ${LIMITS.durationMin} and ${LIMITS.durationMax} minutes.`}
                 />
                 <TextField
                   label="Spots per class"
@@ -248,7 +238,6 @@ export function ScheduleSection({
                   value={values.capacity}
                   onValueChange={(value) => setField("capacity", value)}
                   error={errorFor("capacity")}
-                  helper="How many trial students you can take at once."
                 />
               </div>
               <TextField
@@ -258,7 +247,7 @@ export function ScheduleSection({
                 value={values.label}
                 onValueChange={(value) => setField("label", value)}
                 error={errorFor("label")}
-                helper="Optional note for your team. Families do not see it."
+                helper="Optional team note."
                 placeholder="Main mat with Coach Ana…"
               />
             </FieldGroup>
@@ -291,13 +280,13 @@ export function ScheduleSection({
 
 function WindowRow({ item }: { item: ScheduleWindowItem }) {
   return (
-    <li className="flex flex-col gap-4 rounded-xl border border-zinc-900 bg-zinc-950/40 p-4">
-      <div className="flex flex-col gap-2">
+    <li className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
+      <div className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium text-zinc-100 tabular-nums">
+          <p className="text-sm font-medium text-foreground tabular-nums">
             {formatTimeRange(item.startMinute, item.durationMinutes)}
           </p>
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-muted-foreground">
             {formatDuration(item.durationMinutes)}
           </span>
           {item.active ? (
@@ -309,15 +298,15 @@ function WindowRow({ item }: { item: ScheduleWindowItem }) {
             <Badge tone="warning">Upcoming bookings</Badge>
           ) : null}
         </div>
-        <p className="text-sm text-zinc-400 text-pretty">
+        <p className="text-sm text-muted-foreground">
           {item.offeringName}
-          {item.offeringActive ? "" : " · trial class is not offered"}
+          {item.offeringActive ? "" : " · trial class not offered"}
           {item.label ? ` · ${item.label}` : ""}
         </p>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-muted-foreground">
           {formatCount(item.capacity, "spot")} per class
           {item.maxUpcomingBooked > 0
-            ? ` · ${formatCount(item.maxUpcomingBooked, "student")} booked in an upcoming class`
+            ? ` · ${formatCount(item.maxUpcomingBooked, "student")} booked`
             : ""}
         </p>
       </div>
@@ -339,25 +328,23 @@ function WindowRow({ item }: { item: ScheduleWindowItem }) {
               title: "Turn off this class time?",
               body: (
                 <>
-                  Families will stop seeing it when they book a trial. Bookings
-                  already made stay in place, and this cannot be turned back on
-                  from settings yet — you would add a new class time instead.
+                  Families will stop seeing it when they book a trial. Existing
+                  bookings remain.
                 </>
               ),
               confirmLabel: "Turn It Off",
             }}
           />
         ) : (
-          <p className="text-xs text-zinc-500 text-pretty">
-            Turned off. Reopening a class time is not available yet — add a new
-            one with the same day and time.
+          <p className="text-xs text-muted-foreground">
+            Turned off. Reopening is not available yet — add a new class time
+            instead.
           </p>
         )}
 
         {item.onCalendar ? (
-          <p className="max-w-prose text-xs text-zinc-500 text-pretty">
-            This time is already on your calendar, so it cannot be deleted. Turn
-            it off to stop offering it.
+          <p className="max-w-prose text-xs text-muted-foreground">
+            Already on calendar (cannot delete). Turn off to stop offering.
           </p>
         ) : (
           <ItemActionForm
@@ -370,8 +357,7 @@ function WindowRow({ item }: { item: ScheduleWindowItem }) {
               title: "Delete this class time?",
               body: (
                 <>
-                  It disappears from your weekly schedule. Nobody has booked it
-                  yet, so no family is affected. This cannot be undone.
+                  It will be removed from your schedule. This cannot be undone.
                 </>
               ),
               confirmLabel: "Delete Class Time",
@@ -412,7 +398,7 @@ function CapacityForm({
     <form
       ref={formRef}
       action={formAction}
-      className="flex flex-col gap-3 border-t border-zinc-900 pt-3 sm:flex-row sm:items-end"
+      className="flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-end"
     >
       <input type="hidden" name="id" value={id} />
       <div className="w-full sm:max-w-40">
@@ -428,8 +414,8 @@ function CapacityForm({
           error={errorFor("capacity")}
           helper={
             minimum > 0
-              ? `At least ${minimum} — that many students are already booked.`
-              : `Between ${LIMITS.capacityMin} and ${LIMITS.capacityMax}.`
+              ? `Min ${minimum} (booked).`
+              : `Range ${LIMITS.capacityMin}–${LIMITS.capacityMax}.`
           }
         />
       </div>
@@ -455,8 +441,8 @@ function CapacityForm({
           <p
             role="status"
             aria-live="polite"
-            className={`text-xs text-pretty ${
-              state.status === "error" ? "text-red-400" : "text-emerald-300"
+            className={`text-xs ${
+              state.status === "error" ? "text-destructive" : "text-emerald-400"
             }`}
           >
             {state.message}

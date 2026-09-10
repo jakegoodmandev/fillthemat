@@ -8,6 +8,16 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { IDLE_STATE, type SettingsFormState } from "../form-state";
 import {
   dangerButtonClass,
@@ -53,14 +63,10 @@ export function useSettingsForm({
   const blankRef = useRef(initialValues);
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Field errors are hidden once the owner edits that field again, so clear the
-  // record of edits as the submit starts rather than when the answer arrives.
   const formAction = useCallback(
     (formData: FormData) => {
       setEditedFields([]);
       editedSinceSubmit.current = [];
-      // What actually went to the server, used as the fallback baseline when an
-      // action reports success without echoing normalized values back.
       const submitted: Values = {};
       for (const field of Object.keys(blankRef.current)) {
         const raw = formData.get(field);
@@ -86,9 +92,6 @@ export function useSettingsForm({
       setBaseline(blankRef.current);
       return;
     }
-    // Prefer what the server says it stored (trimmed, normalized); fall back to
-    // what was submitted so a save can never leave the form stuck on
-    // "Unsaved changes" with a Discard that would undo a live write.
     const saved = state.values ?? submittedValues.current;
     const typedDuringSave = editedSinceSubmit.current;
     setValues((previous) => {
@@ -156,19 +159,19 @@ export function SectionStatus({
   idleHint?: string;
 }) {
   let message = idleHint ?? "";
-  let tone = "text-zinc-500";
+  let tone = "text-muted-foreground";
   if (pending) {
     message = "Saving…";
-    tone = "text-zinc-300";
+    tone = "text-foreground";
   } else if (state.status === "error") {
     message = state.message ?? "That did not save.";
-    tone = "text-red-400";
+    tone = "text-destructive font-medium";
   } else if (dirty) {
     message = "Unsaved changes";
-    tone = "text-amber-300";
+    tone = "text-amber-300 font-medium";
   } else if (state.status === "success") {
     message = state.message ?? "Saved.";
-    tone = "text-emerald-300";
+    tone = "text-emerald-400 font-medium";
   }
 
   return (
@@ -201,7 +204,7 @@ export function SaveBar({
   idleHint?: string;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-t border-zinc-900 pt-4 sm:flex-row-reverse sm:items-center">
+    <div className="flex flex-col gap-3 border-t border-border/80 pt-4 sm:flex-row-reverse sm:items-center">
       <div className="flex shrink-0 gap-2">
         <button
           type="submit"
@@ -253,7 +256,7 @@ export function ItemActionForm({
 }) {
   const [state, formAction, pending] = useActionState(action, IDLE_STATE);
   const formRef = useRef<HTMLFormElement>(null);
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const buttonClass =
     variant === "danger" ? dangerButtonClass : secondaryButtonClass;
 
@@ -261,62 +264,63 @@ export function ItemActionForm({
     <div className={`flex min-w-0 flex-col gap-1 ${className ?? ""}`}>
       <form ref={formRef} action={formAction}>
         <input type="hidden" name="id" value={id} />
-        <button
-          type={confirm ? "button" : "submit"}
-          className={buttonClass}
-          disabled={pending}
-          aria-busy={pending || undefined}
-          onClick={confirm ? () => dialogRef.current?.showModal() : undefined}
-        >
-          {pending ? pendingLabel : label}
-        </button>
+        {confirm ? (
+          <button
+            type="button"
+            className={buttonClass}
+            disabled={pending}
+            aria-busy={pending || undefined}
+            onClick={() => setConfirmOpen(true)}
+          >
+            {pending ? pendingLabel : label}
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className={buttonClass}
+            disabled={pending}
+            aria-busy={pending || undefined}
+          >
+            {pending ? pendingLabel : label}
+          </button>
+        )}
       </form>
       {state.status !== "idle" ? (
         <p
           role="status"
           aria-live="polite"
           className={`text-xs leading-relaxed text-pretty ${
-            state.status === "error" ? "text-red-400" : "text-emerald-300"
+            state.status === "error" ? "text-destructive" : "text-emerald-400"
           }`}
         >
           {state.message}
         </p>
       ) : null}
       {confirm ? (
-        <dialog
-          ref={dialogRef}
-          aria-labelledby={`${id}-confirm-title`}
-          className="m-auto w-[min(28rem,calc(100vw-2rem))] overscroll-contain rounded-2xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 backdrop:bg-black/60"
-        >
-          <h2
-            id={`${id}-confirm-title`}
-            className="text-base font-semibold text-balance"
-          >
-            {confirm.title}
-          </h2>
-          <div className="mt-2 text-sm leading-relaxed text-zinc-400 text-pretty">
-            {confirm.body}
-          </div>
-          <div className="mt-6 flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              className={secondaryButtonClass}
-              onClick={() => dialogRef.current?.close()}
-            >
-              Keep it
-            </button>
-            <button
-              type="button"
-              className={dangerButtonClass}
-              onClick={() => {
-                dialogRef.current?.close();
-                formRef.current?.requestSubmit();
-              }}
-            >
-              {confirm.confirmLabel}
-            </button>
-          </div>
-        </dialog>
+        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{confirm.title}</AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div>{confirm.body}</div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setConfirmOpen(false)}>
+                Keep it
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  formRef.current?.requestSubmit();
+                }}
+              >
+                {confirm.confirmLabel}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       ) : null}
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { updatePricingAction } from "../actions";
 import { LIMITS } from "../schemas";
-import { Callout, secondaryButtonClass, TextAreaField } from "../ui/controls";
+import { secondaryButtonClass, TextAreaField } from "../ui/controls";
 import { SaveBar, useSettingsForm } from "../ui/section-form";
 
 const EXAMPLE = `Trial class: free for first-time students.
@@ -30,12 +30,6 @@ export function PricingSection({ pricing }: { pricing: string }) {
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-6">
-      <Callout>
-        Your agent shares only what you write here. It will not invent
-        discounts, guess a price it cannot find, or promise a rate you have not
-        listed. Anything you leave out, it says it does not know.
-      </Callout>
-
       <TextAreaField
         label="Prices and conditions your agent may share"
         name="pricing"
@@ -44,16 +38,14 @@ export function PricingSection({ pricing }: { pricing: string }) {
         value={values.pricing}
         onValueChange={(value) => setField("pricing", value)}
         error={errorFor("pricing")}
-        helper="Write it the way you would explain it to a parent at the front desk. One line per price works well."
+        helper="Write it as you would explain it to a parent. One line per price works best."
         placeholder="Trial class: free for first-time students…"
       />
 
       {values.pricing.trim().length === 0 ? (
-        <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-zinc-800 p-4">
-          <p className="text-sm font-medium text-zinc-200">
-            Not sure what to include?
-          </p>
-          <pre className="max-w-full overflow-x-auto text-xs leading-relaxed whitespace-pre-wrap text-zinc-400">
+        <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border p-4">
+          <p className="text-sm font-medium text-foreground">Example format:</p>
+          <pre className="max-w-full overflow-x-auto text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
             {EXAMPLE}
           </pre>
           <button
@@ -61,7 +53,7 @@ export function PricingSection({ pricing }: { pricing: string }) {
             className={secondaryButtonClass}
             onClick={() => setField("pricing", EXAMPLE)}
           >
-            Start From This Example
+            Start From Example
           </button>
         </div>
       ) : null}
@@ -72,7 +64,7 @@ export function PricingSection({ pricing }: { pricing: string }) {
         dirty={dirty}
         onDiscard={reset}
         state={state}
-        idleHint="Saved pricing is available to your agent right away."
+        idleHint="Saved pricing takes effect immediately."
       />
     </form>
   );

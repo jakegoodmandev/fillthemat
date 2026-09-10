@@ -27,15 +27,9 @@ export default async function SettingsPage({
     [school.address, school.city].filter(Boolean).join(", ") || null;
 
   return (
-    <main className="flex max-w-6xl flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight text-balance">
-          Settings
-        </h1>
-        <p className="max-w-prose text-sm leading-relaxed text-zinc-400 text-pretty">
-          Teach your agent about your school and manage the trial-booking
-          experience.
-        </p>
+    <main className="flex max-w-6xl flex-col gap-6">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
       </header>
 
       <SettingsShell activeSection={section}>
@@ -43,17 +37,12 @@ export default async function SettingsPage({
           className="flex flex-col gap-6"
           aria-labelledby="section-title"
         >
-          <div className="flex flex-col gap-2">
-            <h2
-              id="section-title"
-              className="text-lg font-semibold text-zinc-100 text-balance"
-            >
-              {meta.title}
-            </h2>
-            <p className="max-w-prose text-sm leading-relaxed text-zinc-400 text-pretty">
-              {meta.purpose}
-            </p>
-          </div>
+          <h2
+            id="section-title"
+            className="text-lg font-semibold text-foreground"
+          >
+            {meta.title}
+          </h2>
           <SectionContent
             section={section}
             schoolId={school.id}

@@ -50,12 +50,9 @@ export function AgentSection({
   });
 
   return (
-    <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <form ref={formRef} action={formAction} className="flex flex-col gap-6">
-        <FieldGroup
-          title="Welcome message"
-          description="The first thing a family sees when they open your booking page."
-        >
+        <FieldGroup title="Welcome message">
           <TextAreaField
             label="Welcome message"
             name="welcomeMessage"
@@ -64,15 +61,12 @@ export function AgentSection({
             value={values.welcomeMessage}
             onValueChange={(value) => setField("welcomeMessage", value)}
             error={errorFor("welcomeMessage")}
-            helper="Greet the family and say what your agent can help with. Leave it blank to use a simple default greeting."
-            placeholder="Hi! I can answer questions about our kids and adult classes and help you book a free trial…"
+            helper="First message families see on your booking page."
+            placeholder="Hi! I can answer questions about our classes and help you book a free trial…"
           />
         </FieldGroup>
 
-        <FieldGroup
-          title="Tone and qualification questions"
-          description="How your agent should sound, and what it is allowed to ask a family before they book."
-        >
+        <FieldGroup title="Tone and qualification questions">
           <TextAreaField
             label="Instructions for your agent"
             name="agentInstructions"
@@ -81,15 +75,15 @@ export function AgentSection({
             value={values.agentInstructions}
             onValueChange={(value) => setField("agentInstructions", value)}
             error={errorFor("agentInstructions")}
-            helper="Write plain sentences, one per line. Your agent uses this for tone and for questions you approve — not for facts. Facts belong in the other categories."
+            helper="Tone and qualification questions (one per line). Facts belong in other settings."
             placeholder="Sound warm and encouraging, and keep answers short…"
           />
           {values.agentInstructions.trim().length === 0 ? (
-            <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-zinc-800 p-4">
-              <p className="text-sm font-medium text-zinc-200">
-                An example to start from
+            <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border p-4">
+              <p className="text-sm font-medium text-foreground">
+                Example instructions:
               </p>
-              <pre className="max-w-full overflow-x-auto text-xs leading-relaxed whitespace-pre-wrap text-zinc-400">
+              <pre className="max-w-full overflow-x-auto text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
                 {EXAMPLE_INSTRUCTIONS}
               </pre>
               <button
@@ -99,41 +93,18 @@ export function AgentSection({
                   setField("agentInstructions", EXAMPLE_INSTRUCTIONS)
                 }
               >
-                Start From This Example
+                Start From Example
               </button>
             </div>
           ) : null}
         </FieldGroup>
 
-        <Callout title="What you can and cannot change">
-          <p>You can shape:</p>
-          <ul className="mt-1 list-disc pl-5">
-            <li>How your agent sounds — warm, brief, formal.</li>
-            <li>
-              Extra questions it may ask before booking, such as previous
-              experience or injuries to know about.
-            </li>
-          </ul>
-          <p className="mt-3">
-            These rules apply to every school and cannot be changed here:
-          </p>
-          <ul className="mt-1 list-disc pl-5">
-            <li>It answers only from the information in these settings.</li>
-            <li>
-              It never invents prices or discounts, and only shares the pricing
-              you wrote.
-            </li>
-            <li>
-              Eligibility comes from the age ranges on your trial classes.
-            </li>
-            <li>
-              It only offers real open class times, and never holds or promises
-              a spot.
-            </li>
-            <li>
-              It never takes payment, handles waivers, or confirms a booking
-              itself — your booking form does that.
-            </li>
+        <Callout title="Fixed safeguards">
+          <ul className="list-disc pl-5 text-xs space-y-1">
+            <li>Answers only from your provided settings.</li>
+            <li>Never invents prices or discounts.</li>
+            <li>Eligibility derived strictly from trial class age ranges.</li>
+            <li>Only offers real open class times from your schedule.</li>
           </ul>
         </Callout>
 
@@ -143,14 +114,14 @@ export function AgentSection({
           dirty={dirty}
           onDiscard={reset}
           state={state}
-          idleHint="Saved changes apply to the next conversation a family starts."
+          idleHint="Saved changes take effect immediately."
         />
       </form>
 
       <PreviewPanel
         title="Welcome preview"
         dirty={dirty}
-        note="Representative view of your booking page. It shows your welcome message, not what your agent will answer next."
+        note="Representative view of your page."
       >
         <PublicPagePreview
           schoolName={schoolName}
