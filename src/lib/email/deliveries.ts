@@ -10,8 +10,9 @@ import {
   type School,
   schools,
 } from "@/db/schema";
+import { isLocalEmailNoop } from "@/lib/dev-flags";
 import { buildTrialIcs } from "./ics";
-import { getFromAddress, getResend } from "./resend";
+import { getFromAddress, getResendOrNull } from "./resend";
 import {
   ownerBookingEmail,
   ownerCancellationEmail,
@@ -130,7 +131,24 @@ export async function sendDelivery(
 
   try {
     const rendered = await renderDelivery(delivery, school, booking ?? null);
-    const resend = getResend();
+    const resend = getResendOrNull();
+    if (!resend) {
+      if (!isLocalEmailNoop()) throw new Error("RESEND_API_KEY is not set");
+      console.info(
+        `[local email noop] ${delivery.kind} → ${delivery.recipient}: ${rendered.subject}`,
+      );
+      await db
+        .update(emailDeliveries)
+        .set({
+          state: "sent",
+          providerId: `local-noop:${delivery.id}`,
+          sentAt: new Date(),
+          lastError: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(emailDeliveries.id, delivery.id));
+      return "sent";
+    }
     const result = await resend.emails.send({
       from: getFromAddress(),
       to: delivery.recipient,

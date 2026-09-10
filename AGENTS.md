@@ -12,6 +12,19 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 Before running the app, changing env files, Supabase config, auth, or onboarding docs, read **`docs/local-development.md`**. That is the source of truth for the local stack (current workaround and the planned `bun run setup` bootstrap). Do not add a vendored skill for this; keep third-party skills in `skills-lock.json` only.
 
+### Worktree port contract
+
+Each worktree shares the machine's one Supabase/Docker stack but owns the Next.js origin written by `bun run setup` (`NEXT_PUBLIC_SITE_URL`). Treat that assignment as a core assumption:
+
+- Create worktrees at `.worktrees/<name>` from the repo root (`git worktree add .worktrees/<name> -b <branch>`). That directory is gitignored.
+- Run `bun run setup` in the worktree and use the app origin it prints.
+- Do not pass `--port` to `bun run dev` or manually edit `NEXT_PUBLIC_SITE_URL` in `.env.local`.
+- Assume eligible origins (`http://127.0.0.1:3000`, `:3010`, … `:3090`) are reserved for this repo.
+- If that port is occupied, stop and report the collision; do not silently choose another port.
+- Stop this worktree's Next process with `bun run dev:stop`. Do not `pkill` Next/dev-local by name.
+- Do not stop or recreate Supabase from a child worktree; other agents may be using it.
+- When the worktree is finished: in that tree run `bun run dev:stop`, then from the repo root `git worktree remove .worktrees/<name>`. Do not delete `.git/fillthemat-ports/*` by hand — the next `bun run setup` reuses the port once the directory is gone. Delete the branch separately if you no longer need it (`git branch -d <branch>`).
+
 ## Agent skills
 
 `skills-lock.json` is the only source of truth for project skills. Do not vendor skill files or commit generated skill directories (`.agents/skills/`, `.pi/skills/`).

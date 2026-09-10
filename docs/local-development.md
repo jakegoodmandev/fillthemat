@@ -1,6 +1,6 @@
 # Local development onboarding
 
-This is the plan for making Fillthemat easy to run locally for humans and coding agents. It is also the canonical local-setup reference until the target bootstrap lands.
+This is the plan and canonical local-setup reference. Phases 1–3 are implemented on this stack: `bun run setup`, local email auth + seed, and degradable Resend/chat.
 
 **Do not freeze the current founder-alpha workflow.** It works for one operator who already has Google Cloud, Resend, Vercel, and Cloudflare accounts. It is too many external accounts, env files, and manual Studio steps for a new contributor.
 
@@ -48,9 +48,9 @@ bun run dev
 | 6 | **Turnstile is required for booking UI** | Site key is read in client components; missing secret makes `verifyTurnstile` return false. Cloudflare **always-pass test keys** exist and are public, but they are not in `.env.example`. |
 | 7 | **AI chat needs Vercel OIDC** | `gateway(BOOKING_AGENT_MODEL)` plus `VERCEL_OIDC_TOKEN`. Default model `anthropic/claude-sonnet-4.6` is not on Gateway free tier (`docs/v1-plan-remaining.md`). Local chat is gated on `vercel login` + `vercel env pull` and a allowed model id. |
 | 8 | **Heavy local Supabase** | `config.toml` enables db, auth, studio, realtime, storage, edge runtime, vector, S3 protocol, local SMTP. Fillthemat only needs **Postgres + Auth** (Studio and Inbucket are nice-to-have). Slow start, high RAM, needs a running Docker Engine. |
-| 9 | **No bootstrap / doctor** | Keys from `supabase start` are not written to `.env.local`. No check that the container engine is up, Bun is 1.4, or `app.schools` exists. |
+| 9 | **Bootstrap / doctor** | **Phase 1 landed:** `bun run setup` starts Supabase, writes `.env.local` from `supabase status`, fills Turnstile test keys + `CRON_SECRET`, migrates. `bun run doctor` probes Bun, `docker info`, status, and required keys. |
 | 10 | **Docs drift** | README, `docs/v1-plan.md`, and `docs/v1-deploy-current.md` overlap. Local vs hosted steps are mixed. No `CONTRIBUTING.md`. `AGENTS.md` does not mention how to run the app. |
-| 11 | **One stack per machine** | `project_id = "fillthemat"` and fixed ports (`54321`–`54324`, `54322` db). Git worktrees (`.worktrees`) share that stack; a second `supabase start` will collide. |
+| 11 | **One Supabase stack per machine** | `project_id = "fillthemat"` and fixed API/DB ports (`54321`–`54324`, `54322` db). Git worktrees share Docker. Each worktree gets its own Next port (`3000 + n*10`) from `bun run setup`; do not start a second Supabase. |
 | 12 | **Tests do not prove the stack** | Unit tests need no Docker. Integration config exists with **zero** `*.integration.test.ts` files. Playwright smoke needs `bun run dev` but not a seeded school. No CI. |
 
 None of this is a reason to abandon local Supabase. The Auth JWTs, `auth.users` FK in `drizzle/0000_*.sql`, and “browser uses Auth only / server uses Drizzle” split are the product’s data model. Replacing that with a fake auth layer would create a second, lying environment.
@@ -94,7 +94,7 @@ bunx vercel env pull            # OIDC for real booking chat
 | `DATABASE_URL` / `DIRECT_URL` | `postgresql://postgres:postgres@127.0.0.1:54322/postgres` | Yes — written by setup |
 | `NEXT_PUBLIC_SUPABASE_URL` | `http://127.0.0.1:54321` | Yes — written by setup |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | from `supabase status -o env` | Yes — written by setup |
-| `NEXT_PUBLIC_SITE_URL` | `http://127.0.0.1:3000` | Yes |
+| `NEXT_PUBLIC_SITE_URL` | `http://127.0.0.1:3000` (or `:3010` … `:3090` per worktree) | Yes — written by setup. `bun run dev` parses the port from this URL. |
 | `CRON_SECRET` | generated UUID | Yes (cron route rejects empty) |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare always-pass test keys | Yes for booking forms; safe to commit as defaults in the generator |
 | `RESEND_API_KEY` / `RESEND_FROM` / `RESEND_WEBHOOK_SECRET` | unset | No — local mail adapter logs instead of sending |
@@ -226,33 +226,29 @@ Ship in this order so each phase is usable alone.
 
 No behavior change. New people can follow the workaround below.
 
-### Phase 1 — Bootstrap script + env unification
+### Phase 1 — Bootstrap script + env unification — **landed (this PR)**
 
 - `scripts/setup-local.ts`, `package.json` scripts `setup` and `doctor`.
-- Generate `.env.local` from `supabase status`.
-- README quickstart becomes `bun install && bun run setup && bun run dev`.
-- Leave Google and Studio approval as they are so Phase 1 is still useful to the founder.
+- Generate `.env.local` from `supabase status` (preserves Resend / OIDC / model if already set).
+- Writes Google placeholders into `supabase/.env` when missing so `supabase start` does not require a Cloud client.
+- Cloudflare always-pass Turnstile keys and a generated `CRON_SECRET`.
+- README quickstart is `bun quickstart`.
 
-**Done when:** a contributor with Bun, a Docker Engine, and no SaaS keys gets Next listening and Studio opening. Sign-in may still require Google until Phase 2.
+Sign-in still requires Google until Phase 2.
 
-### Phase 2 — Local auth + seed + self-approval
+### Phase 2 — Local auth + seed + self-approval — **landed (this PR)**
 
-- Email signup in `config.toml`.
-- Dev-only sign-in UI.
-- Seed owner + approved demo school.
-- `ALLOW_SELF_APPROVAL`.
-- Slim unused Supabase services.
+- Email signup in local `config.toml` (hosted Auth unchanged).
+- Dev-only sign-in UI when `NEXT_PUBLIC_DEV_AUTH=true`.
+- Seed `owner@local.test` / `local-dev-password` + approved unpublished `/s/demo`.
+- `ALLOW_SELF_APPROVAL` auto-approves schools created in development.
+- Slim unused Supabase services (realtime, storage, edge, vector).
 
-**Done when:** `bun run setup && bun run dev` → sign in as `owner@local.test` → dashboard and `/s/demo` (after publish, or seeded published). Zero Google Cloud.
+### Phase 3 — Degradable vendors — **landed (this PR)**
 
-### Phase 3 — Degradable vendors
-
-- Resend no-op in development.
-- Chat stub without OIDC.
-- Turnstile test keys in the generator.
-- Document optional `vercel env pull` and Resend for “full fidelity.”
-
-**Done when:** Book Trial confirmation works without Resend or Gateway. Chat widget does not 500.
+- Resend no-op in development when `RESEND_API_KEY` is unset (delivery marked `sent`, body logged).
+- Chat stub without `VERCEL_OIDC_TOKEN` (points the prospect at Book Trial).
+- Turnstile test keys in the generator (Phase 1).
 
 ### Phase 4 — Prove it
 
@@ -262,43 +258,69 @@ No behavior change. New people can follow the workaround below.
 
 ---
 
-## Current workaround (until Phase 1–2 exist)
+## How to run it today
 
 Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and a **Docker Engine** whose CLI answers `docker info`. OrbStack (this repo’s founder setup), Docker Desktop, and Colima are all fine. The Supabase CLI talks to the Docker API, not to Docker Desktop specifically.
 
 1. `bun install`
 2. Agents: `bun run skills:install` (see `AGENTS.md` / `skills-lock.json`).
-3. Start platform: `bun run supabase:start`. Copy the API URL, publishable key, and DB URL from the CLI output.
-4. Put application secrets in **`.env.local`** (preferred) or `.env`. Next.js loads both; do not split keys across them on purpose. Minimum:
-
-   ```
-   DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
-   DIRECT_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
-   NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<anon from supabase start>
-   NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000
-   CRON_SECRET=<bun -e 'console.log(crypto.randomUUID()+crypto.randomUUID())'>
-   NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
-   TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
-   BOOKING_AGENT_MODEL=<a Gateway model your Vercel project can call>
-   ```
-
-5. Google (currently required to sign in): create a Google Cloud **Web** OAuth client. Authorized redirect: `http://127.0.0.1:54321/auth/v1/callback`. Write `supabase/.env`:
-
-   ```
-   SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID=
-   SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET=
-   ```
-
-   Restart Supabase after changing that file.
-
-6. `bun run db:migrate` then `bun run dev`.
-7. Sign in with Google, create a school, then in Studio (`http://127.0.0.1:54323`) set `app.schools.approved_at` to now.
-8. Optional: `bunx vercel env pull` so `.env.local` contains `VERCEL_OIDC_TOKEN` (needed for real chat). Optional: Resend test key + `RESEND_FROM=onboarding@resend.dev` (mail only reaches the Resend account owner).
+3. `bun run setup` — starts Supabase, writes `.env.local`, migrates. If something fails: `bun run doctor`.
+4. `bun run dev` → the origin setup printed (`http://127.0.0.1:30X0` on the main checkout, 1 <= X <= 9). Worktrees: from the repo root, `git worktree add .worktrees/<name> -b <branch>`, then `bun quickstart` in that tree (new app port, same Docker). Do not `supabase stop` from a child tree.
+5. Sign in at `/sign-in` with `owner@local.test` / `local-dev-password`. Preview then publish `/s/demo` from the dashboard (school is pre-approved).
+6. Optional Google: Web client callback `http://127.0.0.1:54321/auth/v1/callback`, real values in `supabase/.env`, then `bun run supabase:stop && bun run setup`.
+7. Optional full fidelity: `bunx vercel env pull` for real chat; Resend test key + `RESEND_FROM=onboarding@resend.dev` for real mail (owner inbox only). Without them, chat stubs and email rows still complete.
 
 Checks: `bun run check`, `bun run test`. Do not run `bun run db:migrate:prod` unless you intend to migrate hosted data (`docs/v1-deploy-current.md`).
 
-Worktrees: reuse the already-running Supabase on fixed ports; do not start a second stack.
+### Worktree frontend ports
+
+Worktrees reuse the already-running Supabase on fixed ports; do not start or stop a second stack. Each tree gets its own Next origin from `bun run setup`. Auth `additional_redirect_urls` allow `http://127.0.0.1:3000` … `:3090`; restart Supabase once after pulling that config change.
+
+Put every extra checkout at **`.worktrees/<name>`** (gitignored) from the repo root:
+
+```bash
+git worktree add .worktrees/<name> -b <branch>
+cd .worktrees/<name>
+bun quickstart
+```
+
+**How a port is claimed** (`scripts/local-ports.ts`):
+
+1. `bun run setup` asks git for `--git-common-dir` (the main repo `.git`, shared by every linked worktree) and `--show-toplevel` (this checkout’s path).
+2. It writes a **claim file** under that shared git dir:
+
+   ```
+   .git/fillthemat-ports/3000  →  /absolute/path/to/main/checkout
+   .git/fillthemat-ports/3010  →  /absolute/path/to/.worktrees/feat-x
+   ```
+
+   One file per port. One line: the worktree that owns it. Creating the file with exclusive `wx` is the only lock — if two setups race on `:3000`, one wins and the other takes `:3010`.
+3. If the path in a claim file no longer exists (worktree removed), the next setup treats that port as free.
+4. Setup then writes `NEXT_PUBLIC_SITE_URL=http://127.0.0.1:<port>` into **this** worktree’s `.env.local`. That URL is the source of truth for `bun run dev` and `bun run dev:stop` (they parse the port; there is no `PORT=` env).
+5. Re-running setup in the same tree keeps that URL. A first run with no URL picks the lowest free port in `3000, 3010, … 3090`.
+
+These files live inside `.git`, so they are not committed. Do not put them in a worktree-local `.git` (linked worktrees would not see each other).
+
+The setup-owned origin is a **core assumption** of the multi-worktree workflow:
+
+- Use the origin printed by `bun run setup` and then start the frontend with plain `bun run dev`.
+- Do not pass `--port` or manually edit `NEXT_PUBLIC_SITE_URL`. `bun run dev` binds the port parsed from that URL.
+- Reserve eligible ports `3000`, `3010`, … `3090` for Fillthemat worktrees.
+- If Next reports `EADDRINUSE`, or `bun run doctor` reports an ineligible site URL, stop and report the collision. Do not pick an arbitrary port; that bypasses the Auth allow-list.
+- Stop this worktree's frontend with `bun run dev:stop`. It SIGTERMs listeners on the origin in `.env.local` and does not touch Supabase or other worktrees.
+- A worktree keeps its assignment across reruns. Removing the worktree directory allows a later setup to reclaim its port.
+
+**When the worktree is done** (from the worktree, then the repo root):
+
+```bash
+cd .worktrees/<name>
+bun run dev:stop          # only this tree's Next; leaves Supabase alone
+cd ../..
+git worktree remove .worktrees/<name>
+# git branch -d <branch>   # optional, if you created a throwaway branch
+```
+
+Do not `supabase stop` from the child tree. Do not hand-delete `.git/fillthemat-ports/<port>` — setup treats the port as free once the worktree path is gone. Use `git worktree remove --force` only if git refuses because of leftover files.
 
 ---
 
