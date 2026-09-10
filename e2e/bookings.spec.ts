@@ -37,6 +37,21 @@ test("booking filters are URL-backed links with selected state", async ({
   await expect(page).toHaveURL(/filter=all/);
 });
 
+test("booked-only is an optional removable filter", async ({ page }) => {
+  await page.goto("/dashboard/bookings?filter=upcoming&status=booked");
+  await expect(page.getByText("Booked only")).toBeVisible();
+  await page.getByRole("link", { name: "Remove Booked only filter" }).click();
+  await expect(page).toHaveURL(/filter=upcoming/);
+  await expect(page).not.toHaveURL(/status=booked/);
+  await expect(
+    page
+      .getByRole("navigation", { name: "Booking filters" })
+      .getByRole("link", {
+        name: "Upcoming",
+      }),
+  ).toHaveAttribute("aria-current", "page");
+});
+
 test("cancel confirmation dismisses without submitting", async ({ page }) => {
   await page.goto("/dashboard/bookings?filter=all");
   const cancelButtons = page.getByRole("button", { name: "Cancel" });

@@ -34,16 +34,22 @@ const FILTERS = [
   { id: "all", label: "All", href: "/dashboard/bookings?filter=all" },
 ] as const;
 
+function resolveStatus(value: unknown): "booked" | null {
+  return value === "booked" ? "booked" : null;
+}
+
 export default async function BookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; status?: string }>;
 }) {
   const { school } = await requireOwnedSchool();
-  const { filter = "upcoming" } = await searchParams;
+  const params = await searchParams;
+  const { filter = "upcoming" } = params;
   const activeFilter = FILTERS.some((item) => item.id === filter)
     ? filter
     : "upcoming";
+  const statusFilter = resolveStatus(params.status);
   const db = getDb();
   const now = new Date();
   const rows = await db
@@ -57,6 +63,7 @@ export default async function BookingsPage({
           : activeFilter === "past"
             ? lt(bookings.startAt, now)
             : undefined,
+        statusFilter ? eq(bookings.status, statusFilter) : undefined,
       ),
     )
     .orderBy(desc(bookings.startAt));
@@ -72,8 +79,13 @@ export default async function BookingsPage({
     }
   }
 
-  const emptyLabel =
-    activeFilter === "upcoming"
+  const emptyLabel = statusFilter
+    ? activeFilter === "upcoming"
+      ? "No upcoming booked reservations."
+      : activeFilter === "past"
+        ? "No past booked reservations."
+        : "No booked reservations."
+    : activeFilter === "upcoming"
       ? "No upcoming bookings."
       : activeFilter === "past"
         ? "No past bookings."
@@ -82,25 +94,42 @@ export default async function BookingsPage({
   return (
     <main id="main-content" className="flex flex-col gap-4">
       <PageHeader title="Bookings" />
-      <nav aria-label="Booking filters" className="flex gap-1">
-        {FILTERS.map((item) => {
-          const current = item.id === activeFilter;
-          return (
+      <nav
+        aria-label="Booking filters"
+        className="flex flex-wrap items-center gap-2"
+      >
+        <div className="flex gap-1">
+          {FILTERS.map((item) => {
+            const current = item.id === activeFilter;
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                aria-current={current ? "page" : undefined}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-sm",
+                  current
+                    ? "bg-muted font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+        {statusFilter ? (
+          <p className="flex items-center gap-2 text-sm">
+            <Badge variant="outline">Booked only</Badge>
             <Link
-              key={item.id}
-              href={item.href}
-              aria-current={current ? "page" : undefined}
-              className={cn(
-                "rounded-full px-3 py-1.5 text-sm",
-                current
-                  ? "bg-muted font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
+              href={`/dashboard/bookings?filter=${activeFilter}`}
+              className="text-muted-foreground underline-offset-4 hover:underline"
+              aria-label="Remove Booked only filter"
             >
-              {item.label}
+              Clear
             </Link>
-          );
-        })}
+          </p>
+        ) : null}
       </nav>
 
       {rows.length === 0 ? (

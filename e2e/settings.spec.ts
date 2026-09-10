@@ -245,3 +245,99 @@ test("a class time can be added, then deleted after confirming", async ({
     page.getByRole("listitem").filter({ hasText: "Playwright temp window" }),
   ).toHaveCount(0);
 });
+
+test("a trial class can be edited, saved, reloaded, and edited again", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/settings?section=offerings");
+  const row = page
+    .getByRole("region", { name: "Your trial classes" })
+    .getByRole("listitem")
+    .filter({ hasText: "Kids beginner trial" })
+    .first();
+  await row.getByRole("button", { name: "Edit" }).click();
+
+  const name = page.getByLabel(/Class name/);
+  const original = await name.inputValue();
+  const next = `Corrected class ${Date.now()}`;
+  await name.fill(next);
+  await page.getByLabel(/Youngest age/).fill("7");
+  await page.getByRole("button", { name: "Save Changes" }).click();
+
+  const savedRow = page.getByRole("listitem").filter({ hasText: next });
+  await expect(
+    page.getByRole("status").filter({ hasText: /saved/i }),
+  ).toBeVisible();
+  await expect(savedRow.getByRole("button", { name: "Edit" })).toBeFocused();
+
+  await page.reload();
+  const reloaded = page.getByRole("listitem").filter({ hasText: next });
+  await expect(reloaded).toBeVisible();
+  await reloaded.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByLabel(/Class name/)).toHaveValue(next);
+  await expect(page.getByLabel(/Youngest age/)).toHaveValue("7");
+
+  await page.getByLabel(/Class name/).fill(original);
+  await page.getByRole("button", { name: "Save Changes" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: /saved/i }),
+  ).toBeVisible();
+});
+
+test("switching records while dirty asks before discarding", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/settings?section=offerings");
+  const row = page
+    .getByRole("region", { name: "Your trial classes" })
+    .getByRole("listitem")
+    .filter({ hasText: "Kids beginner trial" })
+    .first();
+  await row.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel(/Class name/).fill("Unsaved draft name");
+
+  await page.getByRole("button", { name: "Add a Trial Class" }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Keep Editing" }).click();
+  await expect(page.getByLabel(/Class name/)).toHaveValue("Unsaved draft name");
+
+  await page.getByRole("button", { name: "Add a Trial Class" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Discard Changes" })
+    .click();
+  await expect(
+    page.getByRole("group", { name: /Add a trial class/i }),
+  ).toBeVisible();
+});
+
+test("an FAQ can be edited without deleting it", async ({ page }) => {
+  const question = `Parking for the trial? ${Date.now()}`;
+  await page.goto("/dashboard/settings?section=faqs");
+
+  const addButton = page.getByRole("button", { name: "Add a Question" });
+  if (await addButton.isVisible()) await addButton.click();
+
+  await page.getByLabel(/^Question/).fill(question);
+  await page.getByLabel(/^Answer/).fill("Yes, there is a free lot.");
+  await page.getByRole("button", { name: "Add Question" }).click();
+
+  const item = page.getByRole("listitem").filter({ hasText: question });
+  await expect(item).toBeVisible();
+  await item.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel(/^Answer/).fill("Yes — street parking too.");
+  await page.getByRole("button", { name: "Save Changes" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: /saved/i }),
+  ).toBeVisible();
+
+  await item.locator("summary").click();
+  await expect(item.getByText("Yes — street parking too.")).toBeVisible();
+
+  await item.getByRole("button", { name: "Delete" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Delete Question" })
+    .click();
+});
