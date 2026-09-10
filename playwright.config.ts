@@ -10,15 +10,35 @@ const baseURL =
   readEnvFile(".env.local").NEXT_PUBLIC_SITE_URL ??
   "http://127.0.0.1:3000";
 
+const isCI = Boolean(process.env.CI);
+const port = new URL(baseURL).port || "80";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
+  forbidOnly: isCI,
+  retries: isCI ? 2 : 0,
+  workers: isCI ? 1 : undefined,
+  reporter: isCI
+    ? [
+        ["html", { open: "never", outputFolder: "playwright-report" }],
+        ["github"],
+        ["json", { outputFile: "test-results/results.json" }],
+        ["list"],
+      ]
+    : [["html", { open: "never" }], ["list"]],
   use: {
     baseURL,
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    video: isCI ? "retain-on-failure" : "off",
   },
   webServer: {
-    command: "bun run dev",
+    command: isCI
+      ? `bun run --bun next start --hostname 127.0.0.1 --port ${port}`
+      : "bun run dev",
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !isCI,
+    timeout: 120_000,
   },
 });
