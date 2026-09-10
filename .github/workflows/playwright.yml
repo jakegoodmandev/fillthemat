@@ -69,6 +69,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           DEST: playwright/${{ github.event.pull_request.number || github.run_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [ ! -f playwright-report/index.html ]; then
