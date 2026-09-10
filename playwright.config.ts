@@ -15,10 +15,10 @@ const port = new URL(baseURL).port || "80";
 
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
+  fullyParallel: false,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
-  workers: isCI ? 1 : undefined,
+  workers: 1,
   reporter: isCI
     ? [
         ["html", { open: "never", outputFolder: "playwright-report" }],

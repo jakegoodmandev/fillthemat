@@ -9,7 +9,7 @@ follows this file).
 
 - **shadcn/ui** style `radix-nova`, **Radix** primitives (`radix-ui`), Tailwind v4, existing Geist fonts.
 - Source lives in `src/components/ui/`. App chrome lives in `src/components/dashboard/`.
-- One variant helper: `class-variance-authority`. One class merger: `cn` via `src/lib/utils.ts`.
+- One variant helper: `class-variance-authority`. One class merger: `cn` in `src/lib/utils.ts`, built from `clsx` + `tailwind-merge`.
 - Config: `components.json`. Do not install the full registry, charts, data-table kits, or a theme switcher.
 
 ## Tokens

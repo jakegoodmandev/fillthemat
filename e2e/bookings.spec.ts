@@ -39,19 +39,17 @@ test("booking filters are URL-backed links with selected state", async ({
 
 test("cancel confirmation dismisses without submitting", async ({ page }) => {
   await page.goto("/dashboard/bookings?filter=all");
-  const cancel = page.getByRole("button", { name: "Cancel" }).first();
-  if ((await cancel.count()) === 0) {
+  const cancelButtons = page.getByRole("button", { name: "Cancel" });
+  if ((await cancelButtons.count()) === 0) {
     test.skip(true, "No cancellable booking in local demo data");
   }
 
-  await cancel.click();
+  await cancelButtons.first().click();
   const dialog = page.getByRole("alertdialog", {
     name: "Cancel this booking?",
   });
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  await expect(
-    page.getByRole("button", { name: "Cancel" }).first(),
-  ).toBeVisible();
+  await expect(cancelButtons.first()).toBeVisible();
 });

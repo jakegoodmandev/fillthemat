@@ -32,7 +32,7 @@
     "@supabase/supabase-js": "^2.112.4",
     "ai": "^7.0.84",
     "class-variance-authority": "^0.7.1",
-    "cn": "^0.2.6",
+    "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
     "drizzle-orm": "^0.45.2",
@@ -43,6 +43,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "resend": "^6.25.0",
+    "tailwind-merge": "^3.6.0",
     "zod": "^4.5.1"
   },
   "devDependencies": {
