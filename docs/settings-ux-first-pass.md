@@ -1,9 +1,17 @@
 # Settings UX — first pass (implementation notes)
 
-Implements the first pass of `docs/settings-ux-research.md`, plus the
-settings-editor and FAQ/trial-class maintenance work from the settings /
-overview follow-up. The seven categories are unchanged: Profile (“School”),
-Offerings (“Trial classes”), Schedule, Pricing, FAQs, Agent, Branding.
+Implements the first pass of `docs/settings-ux-research.md`, plus Release A
+of `docs/settings-overview-ux-plan.md` (trial-class/FAQ inline editing and
+overview metrics, shipped in #21).
+
+**Next work:** Release B — safe class-time management. Spec, locking gate,
+and acceptance checklist live in `docs/settings-overview-ux-plan.md`. This
+file is current-state after A. Schedule copy that says times cannot be
+reopened or structurally edited is still true until B ships; do not treat it
+as accidental.
+
+The seven categories are unchanged: Profile (“School”), Offerings (“Trial
+classes”), Schedule, Pricing, FAQs, Agent, Branding.
 
 **Presentation:** owner dashboard visuals now follow
 `docs/dashboard-design-system.md` (shared primitives, tokens, AlertDialog).
@@ -150,10 +158,15 @@ can create a booking, lead, or notification.
 ## Deliberately out of scope (this pass)
 
 New categories, AI model controls, website ingestion, uploads, multi-channel
-settings, draft/publish for settings, schema migrations, FAQ reordering,
-reopening class times, in-settings agent testing, and class-time replacement
-(Release B — deferred; needs a proven locking strategy shared with booking
-confirmation).
+settings, draft/publish for settings, schema migrations, FAQ reordering, and
+in-settings agent testing.
+
+**Release B (next, specified in `docs/settings-overview-ux-plan.md`):**
+reopening class times, capacity/label edits through the shared inline editor,
+in-place structural edits when a time has no history, and guided replacement
+when it does — without moving, cancelling, or notifying existing bookings.
+Needs a proven transaction/locking strategy shared with booking confirmation,
+cancellation, and occurrence creation. Prefer no migration.
 
 `createOfferingAction` already accepted `expectations` and `waiverNotes`; the
 form exposes `expectations` (the booking agent reads it) and keeps accepting
