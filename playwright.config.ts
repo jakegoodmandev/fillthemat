@@ -29,8 +29,10 @@ export default defineConfig({
     : [["html", { open: "never" }], ["list"]],
   use: {
     baseURL,
-    trace: "retain-on-failure",
-    screenshot: "only-on-failure",
+    // CI captures a screenshot and trace for every test so the hosted HTML
+    // report shows the UI without downloading artifacts.
+    trace: isCI ? "on" : "retain-on-failure",
+    screenshot: isCI ? "on" : "only-on-failure",
     video: isCI ? "retain-on-failure" : "off",
   },
   webServer: {
