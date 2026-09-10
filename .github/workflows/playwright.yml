@@ -67,27 +67,39 @@ jobs:
       - name: Publish visual report to GitHub Pages
         id: pages
         if: ${{ !cancelled() }}
-        continue-on-error: true
-        uses: peaceiris/actions-gh-pages@v4.1.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: playwright-report
-          destination_dir: playwright/${{ github.event.pull_request.number || github.run_id }}
-          keep_files: true
-          force_orphan: false
-          commit_message: "Playwright report ${{ github.event.pull_request.number || github.run_id }}"
-
-      - name: Ensure GitHub Pages site
-        if: ${{ !cancelled() }}
-        continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEST: playwright/${{ github.event.pull_request.number || github.run_id }}
         run: |
-          gh api "repos/${GITHUB_REPOSITORY}/pages" >/dev/null 2>&1 || \
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/pages" \
-              -f build_type=legacy \
-              -f "source[branch]=gh-pages" \
-              -f "source[path]=/"
+          set -euo pipefail
+          if [ ! -f playwright-report/index.html ]; then
+            echo "No playwright-report/index.html; skipping Pages publish."
+            exit 0
+          fi
+          work=$(mktemp -d)
+          git clone --depth=1 --branch gh-pages \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$work"
+          mkdir -p "$work/$DEST"
+          rm -rf "$work/$DEST"/*
+          cp -R playwright-report/. "$work/$DEST/"
+          cd "$work"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Report unchanged."
+            exit 0
+          fi
+          git commit -m "Playwright report ${DEST}"
+          for attempt in 1 2 3 4 5 6; do
+            if git pull --rebase origin gh-pages && git push origin gh-pages; then
+              echo "Published ${DEST}"
+              exit 0
+            fi
+            echo "Push race (attempt ${attempt}); retrying..."
+            sleep $((attempt * 2))
+          done
+          echo "Failed to publish report after retries."
+          exit 1
 
       - name: Write job summary
         if: ${{ !cancelled() }}
