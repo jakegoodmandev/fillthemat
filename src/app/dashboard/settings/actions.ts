@@ -5,13 +5,13 @@ import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { getDb } from "@/db";
 import {
-  faqs,
   schools,
   trialOccurrences,
   trialOfferings,
   trialWindows,
 } from "@/db/schema";
 import { requireOwnedSchool } from "@/lib/auth/current-school";
+import { publicSchoolPath } from "@/lib/site-url";
 import {
   errorState,
   GENERIC_SERVER_ERROR,
@@ -20,22 +20,38 @@ import {
 } from "./form-state";
 import { formatCount } from "./format";
 import {
+  deleteFaqRecord,
+  insertFaq,
+  insertOffering,
+  setOfferingActive,
+  updateFaq,
+  updateOffering,
+} from "./mutations";
+import {
   agentSchema,
   brandingSchema,
   capacitySchema,
+  FAQ_EDITOR_FIELDS,
   faqSchema,
   fieldErrorsFrom,
   formValues,
   idSchema,
-  LIMITS,
+  OFFERING_EDITOR_FIELDS,
   offeringSchema,
   pricingSchema,
   profileSchema,
   publicAddressSchema,
+  toggleOfferingSchema,
+  updateFaqSchema,
+  updateOfferingSchema,
   windowSchema,
 } from "./schemas";
 
-const SETTINGS_PATH = "/dashboard/settings";
+function revalidateOwnerViews(slug: string) {
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard");
+  revalidatePath(publicSchoolPath(slug));
+}
 
 function nullToEmpty(value: string | null | undefined): string {
   return value ?? "";
@@ -126,7 +142,7 @@ export async function updateProfileAction(
         updatedAt: new Date(),
       })
       .where(eq(schools.id, school.id));
-    revalidatePath(SETTINGS_PATH);
+    revalidateOwnerViews(school.slug);
 
     return successState("School details saved. Your agent uses them now.", {
       name: values.name,
@@ -163,7 +179,7 @@ export async function updatePricingAction(
       .update(schools)
       .set({ pricing: parsed.data.pricing, updatedAt: new Date() })
       .where(eq(schools.id, school.id));
-    revalidatePath(SETTINGS_PATH);
+    revalidateOwnerViews(school.slug);
     return successState("Pricing saved. Your agent may share it now.", {
       pricing: nullToEmpty(parsed.data.pricing),
     });
@@ -194,7 +210,7 @@ export async function updateAgentAction(
         updatedAt: new Date(),
       })
       .where(eq(schools.id, school.id));
-    revalidatePath(SETTINGS_PATH);
+    revalidateOwnerViews(school.slug);
     return successState("Agent settings saved and live on your page.", {
       welcomeMessage: nullToEmpty(parsed.data.welcomeMessage),
       agentInstructions: nullToEmpty(parsed.data.agentInstructions),
@@ -226,7 +242,7 @@ export async function updateBrandingAction(
         updatedAt: new Date(),
       })
       .where(eq(schools.id, school.id));
-    revalidatePath(SETTINGS_PATH);
+    revalidateOwnerViews(school.slug);
     return successState("Branding saved and live on your public page.", {
       logoUrl: nullToEmpty(parsed.data.logoUrl),
       primaryColor: nullToEmpty(parsed.data.primaryColor),
@@ -240,37 +256,65 @@ export async function createOfferingAction(
 ): Promise<SettingsFormState> {
   return run(async () => {
     const { school } = await requireOwnedSchool();
-    const parsed = offeringSchema.safeParse(
-      formValues(formData, [
-        "name",
-        "description",
-        "minimumAge",
-        "maximumAge",
-        "attire",
-        "expectations",
-        "waiverNotes",
-      ]),
-    );
+    const parsed = offeringSchema.safeParse({
+      ...formValues(formData, OFFERING_EDITOR_FIELDS),
+      waiverNotes: "",
+    });
     if (!parsed.success) {
       return errorState(
         "Check the highlighted fields and add the trial class again.",
         fieldErrorsFrom(parsed.error),
       );
     }
-    const db = getDb();
-    await db.insert(trialOfferings).values({
-      schoolId: school.id,
+    const result = await insertOffering(getDb(), school.id, {
       name: parsed.data.name,
       description: parsed.data.description,
       minimumAge: parsed.data.minimumAge,
       maximumAge: parsed.data.maximumAge,
-      expectations: parsed.data.expectations,
       attire: parsed.data.attire,
+      expectations: parsed.data.expectations,
       waiverNotes: parsed.data.waiverNotes,
-      active: true,
     });
-    revalidatePath(SETTINGS_PATH);
-    return successState(`“${parsed.data.name}” added and open for bookings.`);
+    if (result.status === "success") revalidateOwnerViews(school.slug);
+    return result;
+  });
+}
+
+export async function updateOfferingAction(
+  _prev: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  return run(async () => {
+    const { school } = await requireOwnedSchool();
+    const identity = updateOfferingSchema.safeParse(
+      formValues(formData, ["id", "updatedAt"]),
+    );
+    const parsed = offeringSchema.safeParse({
+      ...formValues(formData, OFFERING_EDITOR_FIELDS),
+      waiverNotes: "",
+    });
+    if (!identity.success || !parsed.success) {
+      return errorState("Check the highlighted fields and save again.", {
+        ...(identity.success ? {} : fieldErrorsFrom(identity.error)),
+        ...(parsed.success ? {} : fieldErrorsFrom(parsed.error)),
+      });
+    }
+    const result = await updateOffering(
+      getDb(),
+      school.id,
+      identity.data.id,
+      new Date(identity.data.updatedAt),
+      {
+        name: parsed.data.name,
+        description: parsed.data.description,
+        minimumAge: parsed.data.minimumAge,
+        maximumAge: parsed.data.maximumAge,
+        attire: parsed.data.attire,
+        expectations: parsed.data.expectations,
+      },
+    );
+    if (result.status === "success") revalidateOwnerViews(school.slug);
+    return result;
   });
 }
 
@@ -280,40 +324,22 @@ export async function toggleOfferingAction(
 ): Promise<SettingsFormState> {
   return run(async () => {
     const { school } = await requireOwnedSchool();
-    const parsed = idSchema.safeParse(formValues(formData, ["id"]));
+    const parsed = toggleOfferingSchema.safeParse(
+      formValues(formData, ["id", "active"]),
+    );
     if (!parsed.success) {
       return errorState("That trial class no longer exists. Refresh the page.");
     }
-    const db = getDb();
-    const [offering] = await db
-      .select()
-      .from(trialOfferings)
-      .where(
-        and(
-          eq(trialOfferings.id, parsed.data.id),
-          eq(trialOfferings.schoolId, school.id),
-        ),
-      )
-      .limit(1);
-    if (!offering) {
-      return errorState("That trial class no longer exists. Refresh the page.");
-    }
-    const nextActive = !offering.active;
-    await db
-      .update(trialOfferings)
-      .set({ active: nextActive, updatedAt: new Date() })
-      .where(
-        and(
-          eq(trialOfferings.id, offering.id),
-          eq(trialOfferings.schoolId, school.id),
-        ),
-      );
-    revalidatePath(SETTINGS_PATH);
-    return successState(
-      nextActive
-        ? `“${offering.name}” is open for bookings again.`
-        : `“${offering.name}” is no longer offered to families.`,
+    const result = await setOfferingActive(
+      getDb(),
+      school.id,
+      parsed.data.id,
+      parsed.data.active,
     );
+    if (result.status === "success" && result.values?.unchanged !== "true") {
+      revalidateOwnerViews(school.slug);
+    }
+    return result;
   });
 }
 
@@ -365,7 +391,7 @@ export async function createWindowAction(
       label: parsed.data.label,
       active: true,
     });
-    revalidatePath(SETTINGS_PATH);
+    revalidateOwnerViews(school.slug);
     return successState("Class time added to your weekly schedule.");
   });
 }
@@ -390,7 +416,7 @@ export async function deactivateWindowAction(
           eq(trialWindows.schoolId, school.id),
         ),
       );
-    revalidatePath(SETTINGS_PATH);
+    revalidateOwnerViews(school.slug);
     return successState(
       "Class time turned off. Bookings families already made are unchanged.",
     );
@@ -460,7 +486,7 @@ export async function updateWindowCapacityAction(
           sql`${trialOccurrences.bookedCount} <= ${capacity}`,
         ),
       );
-    revalidatePath(SETTINGS_PATH);
+    revalidateOwnerViews(school.slug);
     return successState(
       `Saved. Upcoming classes now hold ${formatCount(capacity, "student")}.`,
       { capacity: String(capacity) },
@@ -502,7 +528,7 @@ export async function deleteWindowAction(
           eq(trialWindows.schoolId, school.id),
         ),
       );
-    revalidatePath(SETTINGS_PATH);
+    revalidateOwnerViews(school.slug);
     return successState("Class time deleted.");
   });
 }
@@ -513,34 +539,44 @@ export async function createFaqAction(
 ): Promise<SettingsFormState> {
   return run(async () => {
     const { school } = await requireOwnedSchool();
-    const parsed = faqSchema.safeParse(
-      formValues(formData, ["question", "answer"]),
-    );
+    const parsed = faqSchema.safeParse(formValues(formData, FAQ_EDITOR_FIELDS));
     if (!parsed.success) {
       return errorState(
         "Check the highlighted fields and add the question again.",
         fieldErrorsFrom(parsed.error),
       );
     }
-    const db = getDb();
-    const [existing] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(faqs)
-      .where(eq(faqs.schoolId, school.id));
-    const count = existing?.count ?? 0;
-    if (count >= LIMITS.faqCount) {
-      return errorState(
-        `You already have ${LIMITS.faqCount} questions. Delete one before adding another.`,
-      );
+    const result = await insertFaq(getDb(), school.id, parsed.data);
+    if (result.status === "success") revalidateOwnerViews(school.slug);
+    return result;
+  });
+}
+
+export async function updateFaqAction(
+  _prev: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  return run(async () => {
+    const { school } = await requireOwnedSchool();
+    const identity = updateFaqSchema.safeParse(
+      formValues(formData, ["id", "updatedAt"]),
+    );
+    const parsed = faqSchema.safeParse(formValues(formData, FAQ_EDITOR_FIELDS));
+    if (!identity.success || !parsed.success) {
+      return errorState("Check the highlighted fields and save again.", {
+        ...(identity.success ? {} : fieldErrorsFrom(identity.error)),
+        ...(parsed.success ? {} : fieldErrorsFrom(parsed.error)),
+      });
     }
-    await db.insert(faqs).values({
-      schoolId: school.id,
-      question: parsed.data.question,
-      answer: parsed.data.answer,
-      sortOrder: count,
-    });
-    revalidatePath(SETTINGS_PATH);
-    return successState("Question added. Your agent can use this answer now.");
+    const result = await updateFaq(
+      getDb(),
+      school.id,
+      identity.data.id,
+      new Date(identity.data.updatedAt),
+      parsed.data,
+    );
+    if (result.status === "success") revalidateOwnerViews(school.slug);
+    return result;
   });
 }
 
@@ -554,15 +590,8 @@ export async function deleteFaqAction(
     if (!parsed.success) {
       return errorState("That question no longer exists. Refresh the page.");
     }
-    const db = getDb();
-    const deleted = await db
-      .delete(faqs)
-      .where(and(eq(faqs.id, parsed.data.id), eq(faqs.schoolId, school.id)))
-      .returning({ id: faqs.id });
-    if (deleted.length === 0) {
-      return errorState("That question no longer exists. Refresh the page.");
-    }
-    revalidatePath(SETTINGS_PATH);
-    return successState("Question deleted. Your agent will not use it again.");
+    const result = await deleteFaqRecord(getDb(), school.id, parsed.data.id);
+    if (result.status === "success") revalidateOwnerViews(school.slug);
+    return result;
   });
 }

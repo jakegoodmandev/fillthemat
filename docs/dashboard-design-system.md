@@ -38,6 +38,16 @@ Dashboard canvas and raised surfaces are scoped:
 
 Pages must not invent new palettes. Status always includes a word label.
 
+## Overview metrics
+
+`/dashboard` uses one grouped summary surface (border, equal cell padding,
+desktop dividers, stacked mobile cells) — not three decorative cards. Metric
+values are 28–32px semibold tabular numerals; labels 14px; evidence 12–14px.
+Each cell is label → value → scope → optional real text link. No gradient
+fills, metric icons, or unmeasured growth cues. Conversion is undefined (`—`)
+when there are no eligible sessions; `0%` only when eligible sessions exist
+and none converted.
+
 ## Typography and spacing
 
 - Geist Sans. Default UI `text-sm` (14px). Metadata `text-xs` (12px).

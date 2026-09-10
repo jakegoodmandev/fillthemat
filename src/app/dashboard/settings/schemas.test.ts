@@ -8,6 +8,9 @@ import {
   offeringSchema,
   profileSchema,
   publicAddressSchema,
+  toggleOfferingSchema,
+  updateFaqSchema,
+  updateOfferingSchema,
   windowSchema,
 } from "./schemas";
 
@@ -212,6 +215,41 @@ describe("faqSchema", () => {
     const errors = fieldErrorsFrom(result.error);
     expect(errors.question).toBeTruthy();
     expect(errors.answer).toBeTruthy();
+  });
+});
+
+describe("toggleOfferingSchema", () => {
+  const id = "00000000-0000-4000-8000-000000000000";
+
+  it("reads an explicit desired state", () => {
+    expect(toggleOfferingSchema.parse({ id, active: "true" }).active).toBe(
+      true,
+    );
+    expect(toggleOfferingSchema.parse({ id, active: "false" }).active).toBe(
+      false,
+    );
+  });
+
+  it("rejects invert-style missing values", () => {
+    expect(toggleOfferingSchema.safeParse({ id }).success).toBe(false);
+    expect(
+      toggleOfferingSchema.safeParse({ id, active: "maybe" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("update identity schemas", () => {
+  const id = "00000000-0000-4000-8000-000000000000";
+  const updatedAt = "2026-04-01T12:00:00.000Z";
+
+  it("accepts an offering concurrency token", () => {
+    expect(updateOfferingSchema.parse({ id, updatedAt }).id).toBe(id);
+  });
+
+  it("rejects a missing FAQ token", () => {
+    expect(updateFaqSchema.safeParse({ id, updatedAt: "" }).success).toBe(
+      false,
+    );
   });
 });
 

@@ -20,6 +20,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { IDLE_STATE, type SettingsFormState } from "../form-state";
+import {
+  applyCreateSuccessValues,
+  applySavedValues,
+  sameValues,
+} from "../form-utils";
 import { useDirtyRegistration } from "./dirty-context";
 
 export type SettingsAction = (
@@ -29,11 +34,9 @@ export type SettingsAction = (
 
 type Values = Record<string, string>;
 
-function sameValues(a: Values, b: Values): boolean {
-  const keys = Object.keys(a);
-  if (keys.length !== Object.keys(b).length) return false;
-  return keys.every((key) => a[key] === b[key]);
-}
+export type SaveSuccessMeta = {
+  preservedEdits: boolean;
+};
 
 /**
  * Controlled form state for one settings section:
@@ -44,11 +47,15 @@ export function useSettingsForm({
   initialValues,
   dirtyKey,
   clearOnSuccess = false,
+  onSuccess,
+  onPendingChange,
 }: {
   action: SettingsAction;
   initialValues: Values;
   dirtyKey: string;
   clearOnSuccess?: boolean;
+  onSuccess?: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const [state, dispatch, pending] = useActionState(action, IDLE_STATE);
   const [values, setValues] = useState<Values>(initialValues);
@@ -58,9 +65,16 @@ export function useSettingsForm({
   const submittedValues = useRef<Values>(initialValues);
   const blankRef = useRef(initialValues);
   const formRef = useRef<HTMLFormElement>(null);
+  const handledState = useRef<SettingsFormState | null>(null);
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+  const onPendingChangeRef = useRef(onPendingChange);
+  onPendingChangeRef.current = onPendingChange;
 
   const formAction = useCallback(
     (formData: FormData) => {
+      // Mark saving before dispatch so a following click cannot unmount us.
+      onPendingChangeRef.current?.(true);
       setEditedFields([]);
       editedSinceSubmit.current = [];
       const submitted: Values = {};
@@ -75,7 +89,17 @@ export function useSettingsForm({
   );
 
   useEffect(() => {
+    if (!pending) onPendingChangeRef.current?.(false);
+  }, [pending]);
+
+  useEffect(() => {
+    return () => onPendingChangeRef.current?.(false);
+  }, []);
+
+  useEffect(() => {
     if (state.status === "idle") return;
+    if (handledState.current === state) return;
+    handledState.current = state;
     if (state.status === "error") {
       const invalid = formRef.current?.querySelector<HTMLElement>(
         '[aria-invalid="true"]',
@@ -83,21 +107,21 @@ export function useSettingsForm({
       invalid?.focus();
       return;
     }
-    if (clearOnSuccess) {
-      setValues(blankRef.current);
-      setBaseline(blankRef.current);
-      return;
-    }
-    const saved = state.values ?? submittedValues.current;
     const typedDuringSave = editedSinceSubmit.current;
-    setValues((previous) => {
-      const next = { ...previous };
-      for (const [field, value] of Object.entries(saved)) {
-        if (!typedDuringSave.includes(field)) next[field] = value;
-      }
-      return next;
-    });
-    setBaseline((previous) => ({ ...previous, ...saved }));
+    const preservedEdits = typedDuringSave.length > 0;
+    if (clearOnSuccess) {
+      setValues((previous) =>
+        applyCreateSuccessValues(previous, blankRef.current, typedDuringSave),
+      );
+      setBaseline(blankRef.current);
+    } else {
+      const saved = state.values ?? submittedValues.current;
+      setValues((previous) =>
+        applySavedValues(previous, saved, typedDuringSave),
+      );
+      setBaseline((previous) => ({ ...previous, ...saved }));
+    }
+    onSuccessRef.current?.(state, { preservedEdits });
   }, [state, clearOnSuccess]);
 
   const setField = useCallback((name: string, value: string) => {
@@ -188,6 +212,9 @@ export function SaveBar({
   pending,
   dirty,
   onDiscard,
+  onCancel,
+  onCancelDirty,
+  cancelLabel = "Cancel",
   state,
   idleHint,
 }: {
@@ -195,10 +222,35 @@ export function SaveBar({
   savingLabel?: string;
   pending: boolean;
   dirty: boolean;
-  onDiscard: () => void;
+  onDiscard?: () => void;
+  /** Idle close — must not run a dirty/confirm check. */
+  onCancel?: () => void;
+  /** Only used when the form is dirty. */
+  onCancelDirty?: () => void;
+  cancelLabel?: string;
   state: SettingsFormState;
   idleHint?: string;
 }) {
+  const secondary = onCancel ? (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={dirty ? (onCancelDirty ?? onCancel) : onCancel}
+      disabled={pending}
+    >
+      {cancelLabel}
+    </Button>
+  ) : (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={onDiscard}
+      disabled={!dirty || pending}
+    >
+      Discard
+    </Button>
+  );
+
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row-reverse sm:items-center">
       <div className="flex shrink-0 gap-2">
@@ -209,14 +261,7 @@ export function SaveBar({
         >
           {pending ? savingLabel : saveLabel}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onDiscard}
-          disabled={!dirty || pending}
-        >
-          Discard
-        </Button>
+        {secondary}
       </div>
       <SectionStatus
         state={state}
@@ -240,6 +285,8 @@ export function ItemActionForm({
   variant = "secondary",
   confirm,
   className,
+  extraFields,
+  disabled = false,
 }: {
   action: SettingsAction;
   id: string;
@@ -248,21 +295,29 @@ export function ItemActionForm({
   variant?: "secondary" | "danger";
   confirm?: { title: string; body: React.ReactNode; confirmLabel: string };
   className?: string;
+  extraFields?: Record<string, string>;
+  disabled?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, IDLE_STATE);
   const formRef = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState(false);
   const buttonVariant = variant === "danger" ? "destructive" : "outline";
+  const busy = pending || disabled;
 
   return (
     <div className={`flex min-w-0 flex-col gap-1 ${className ?? ""}`}>
       <form ref={formRef} action={formAction}>
         <input type="hidden" name="id" value={id} />
+        {extraFields
+          ? Object.entries(extraFields).map(([name, value]) => (
+              <input key={name} type="hidden" name={name} value={value} />
+            ))
+          : null}
         <Button
           type={confirm ? "button" : "submit"}
           variant={buttonVariant}
           size="sm"
-          disabled={pending}
+          disabled={busy}
           aria-busy={pending || undefined}
           onClick={confirm ? () => setOpen(true) : undefined}
         >

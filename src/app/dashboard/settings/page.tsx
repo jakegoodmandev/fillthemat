@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/dashboard/page-header";
 import { requireOwnedSchool } from "@/lib/auth/current-school";
 import { listTimezones } from "@/lib/timezones";
+import { serializeTimestamp } from "./form-utils";
 import { formatTimezone } from "./format";
 import { loadFaqs, loadOfferings, loadWindows } from "./queries";
 import { resolveSection, type SectionId, sectionMeta } from "./sections";
@@ -102,6 +103,7 @@ async function SectionContent({
           attire: offering.attire,
           expectations: offering.expectations,
           active: offering.active,
+          updatedAt: serializeTimestamp(offering.updatedAt),
           windowCount: windows.filter(
             (window) => window.trialOfferingId === offering.id,
           ).length,
@@ -156,6 +158,7 @@ async function SectionContent({
           id: faq.id,
           question: faq.question,
           answer: faq.answer,
+          updatedAt: serializeTimestamp(faq.updatedAt),
         }))}
       />
     );

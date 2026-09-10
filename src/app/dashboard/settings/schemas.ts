@@ -245,6 +245,35 @@ export const capacitySchema = z.object({
 
 export const idSchema = z.object({ id: z.uuid("That item no longer exists.") });
 
+const isoTimestamp = z
+  .string()
+  .trim()
+  .refine(
+    (value) => value.length > 0 && !Number.isNaN(Date.parse(value)),
+    "Reload the page and try again.",
+  );
+
+export const updateOfferingSchema = z.object({
+  id: z.uuid("That trial class no longer exists."),
+  updatedAt: isoTimestamp,
+});
+
+export const toggleOfferingSchema = z.object({
+  id: z.uuid("That trial class no longer exists."),
+  active: z
+    .string()
+    .refine(
+      (value) => value === "true" || value === "false",
+      "Choose whether this trial class should be offered.",
+    )
+    .transform((value) => value === "true"),
+});
+
+export const updateFaqSchema = z.object({
+  id: z.uuid("That question no longer exists."),
+  updatedAt: isoTimestamp,
+});
+
 export const faqSchema = z.object({
   question: required(
     LIMITS.faqQuestion,
@@ -257,6 +286,17 @@ export const faqSchema = z.object({
     `Keep the answer under ${LIMITS.faqAnswer.toLocaleString("en-US")} characters.`,
   ),
 });
+
+export const OFFERING_EDITOR_FIELDS = [
+  "name",
+  "description",
+  "minimumAge",
+  "maximumAge",
+  "attire",
+  "expectations",
+] as const;
+
+export const FAQ_EDITOR_FIELDS = ["question", "answer"] as const;
 
 /** FormData -> plain object of trimmed strings, safe to hand to zod. */
 export function formValues(
