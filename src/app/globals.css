@@ -1,13 +1,64 @@
 @import "tailwindcss";
 
+/*
+ * Fillthemat design system tokens (shadcn/ui conventions).
+ *
+ * The whole app renders on a dark canvas (`<html class="dark">` is set in the
+ * root layout); the public /s/[slug] page wraps itself in its own light
+ * surface, so these tokens never leak onto it. Portaled dialogs inherit the
+ * dark tokens from <html>, which keeps owner-facing overlays coherent.
+ */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --primary: #171717;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #171717;
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+  --accent: #f4f4f5;
+  --accent-foreground: #171717;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --success: #16a34a;
+  --success-foreground: #ffffff;
+  --warning: #d97706;
+  --warning-foreground: #ffffff;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #171717;
 }
 
 html.dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #17171b;
+  --foreground: #ececef;
+  --card: #1f1f26;
+  --card-foreground: #ececef;
+  --popover: #1f1f26;
+  --popover-foreground: #ececef;
+  --primary: #ececef;
+  --primary-foreground: #1a1a1f;
+  --secondary: #2a2a32;
+  --secondary-foreground: #ececef;
+  --muted: #2a2a32;
+  --muted-foreground: #a4a4ae;
+  --accent: #2a2a32;
+  --accent-foreground: #ececef;
+  --destructive: #f87171;
+  --destructive-foreground: #2a0b0d;
+  --success: #4ade80;
+  --success-foreground: #0c2014;
+  --warning: #f5b942;
+  --warning-foreground: #241a04;
+  --border: #2a2a32;
+  --input: #2a2a32;
+  --ring: #7d7d8c;
+
   /* Native controls (select, time, number, color) follow the dark surface. */
   color-scheme: dark;
 }
@@ -15,12 +66,49 @@ html.dark {
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-body {
-  background: var(--background);
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.875rem; /* 14px default UI text */
+  }
+}
+
+/* Native controls share the input surface so selects/date/time/color tucks in. */
+select,
+input[type="time"],
+input[type="number"],
+input[type="color"] {
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }

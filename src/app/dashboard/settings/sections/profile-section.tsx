@@ -58,16 +58,12 @@ export function ProfileSection({
     <form ref={formRef} action={formAction} className="flex flex-col gap-6">
       {published ? (
         <Callout tone="locked" title="Your page is published">
-          Your public web address and time zone are locked so that links you
-          have shared and classes families already booked keep working.
-          Everything else on this page can still change.
+          Your web address and time zone are locked so shared links and booked
+          classes keep working. Everything else on this page can still change.
         </Callout>
       ) : null}
 
-      <FieldGroup
-        title="School identity"
-        description="What families see when your agent introduces your school."
-      >
+      <FieldGroup title="School identity">
         <TextField
           label="School name"
           name="name"
@@ -77,7 +73,7 @@ export function ProfileSection({
           value={values.name}
           onValueChange={(value) => setField("name", value)}
           error={errorFor("name")}
-          helper="Families see this name on your public page and in every message from your agent."
+          helper="Shown on your public page and in your agent's messages."
           placeholder="Northside Martial Arts…"
         />
         <TextField
@@ -122,10 +118,7 @@ export function ProfileSection({
         )}
       </FieldGroup>
 
-      <FieldGroup
-        title="Contact and location"
-        description="Your agent uses these facts to answer “where are you?” and “how do I reach you?”"
-      >
+      <FieldGroup title="Contact and location">
         <TextField
           label="Notification email"
           name="notificationEmail"
@@ -137,7 +130,7 @@ export function ProfileSection({
           value={values.notificationEmail}
           onValueChange={(value) => setField("notificationEmail", value)}
           error={errorFor("notificationEmail")}
-          helper="Where we send your booking and lead alerts. Internal only — your agent never shares this with families."
+          helper="Where your booking and lead alerts go. Internal only — your agent never shares it."
           placeholder="owner@example.com…"
         />
         <div className="grid gap-4 sm:grid-cols-2">
@@ -151,7 +144,7 @@ export function ProfileSection({
             value={values.phone}
             onValueChange={(value) => setField("phone", value)}
             error={errorFor("phone")}
-            helper="Your agent shares this when a parent asks how to reach you."
+            helper="Shared when a parent asks how to reach you."
             placeholder="(555) 123-4567…"
           />
           <TextField
@@ -164,7 +157,7 @@ export function ProfileSection({
             value={values.website}
             onValueChange={(value) => setField("website", value)}
             error={errorFor("website")}
-            helper="Your agent may point families here for more about your school."
+            helper="Your agent may point families here."
             placeholder="https://example.com…"
           />
         </div>
@@ -176,7 +169,7 @@ export function ProfileSection({
           value={values.address}
           onValueChange={(value) => setField("address", value)}
           error={errorFor("address")}
-          helper="Your agent shares this so families can find the school."
+          helper="Shared so families can find the school."
           placeholder="120 Main Street, Suite 3…"
         />
         <div className="grid gap-4 sm:grid-cols-2">
@@ -207,10 +200,7 @@ export function ProfileSection({
         </div>
       </FieldGroup>
 
-      <FieldGroup
-        title="Arriving for a trial class"
-        description="Practical answers your agent gives parents before their first visit."
-      >
+      <FieldGroup title="Arriving for a trial class">
         <TextAreaField
           label="Parking"
           name="parkingNotes"
@@ -219,7 +209,7 @@ export function ProfileSection({
           value={values.parkingNotes}
           onValueChange={(value) => setField("parkingNotes", value)}
           error={errorFor("parkingNotes")}
-          helper="Your agent uses this to explain where students can park."
+          helper="Explains where students can park."
           placeholder="Free lot behind the building, plus street parking after 6 PM…"
         />
         <TextAreaField
@@ -230,7 +220,7 @@ export function ProfileSection({
           value={values.accessNotes}
           onValueChange={(value) => setField("accessNotes", value)}
           error={errorFor("accessNotes")}
-          helper="Which door to use, stairs or elevator, buzzer codes families should skip."
+          helper="Which door to use, stairs or elevator, any buzzer codes."
           placeholder="Use the glass door on the left side of the plaza; we are on the second floor…"
         />
         <TextAreaField
@@ -241,7 +231,7 @@ export function ProfileSection({
           value={values.trialGuidance}
           onValueChange={(value) => setField("trialGuidance", value)}
           error={errorFor("trialGuidance")}
-          helper="How early to arrive, where parents wait, what to bring. Class-specific clothing belongs in Trial classes."
+          helper="How early to arrive, where parents wait, what to bring. Class clothing belongs in Trial classes."
           placeholder="Arrive 10 minutes early, check in at the front desk, parents watch from the benches…"
         />
       </FieldGroup>

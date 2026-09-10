@@ -1,5 +1,15 @@
 # Settings UX — first pass (implementation notes)
 
+> **Visual makeover (current).** After this first pass, the dashboard look
+> was unified on one design system — see `docs/dashboard-design-system.md`.
+> Confirmations now use the shared Radix `AlertDialog` (`role="alertdialog"`)
+> instead of native `<dialog>`; category navigation is label-only (hints and
+> the page/section purpose paragraphs were removed); and all dashboard styling
+> moved to the semantic tokens in `src/app/globals.css`.
+>
+> `docs/settings-ux-research.md` is the historical planning doc; the current
+> implementation is described here and in the design-system doc.
+
 Implements the first pass of `docs/settings-ux-research.md`. The seven categories
 are unchanged: Profile (“School”), Offerings (“Trial classes”), Schedule,
 Pricing, FAQs, Agent, Branding.

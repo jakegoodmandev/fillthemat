@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   createWindowAction,
   deactivateWindowAction,
@@ -19,11 +20,9 @@ import { LIMITS } from "../schemas";
 import { sectionHref } from "../sections";
 import {
   Badge,
-  Callout,
   EmptyState,
   FieldGroup,
   SelectField,
-  secondaryButtonClass,
   TextField,
 } from "../ui/controls";
 import { ItemActionForm, SaveBar, useSettingsForm } from "../ui/section-form";
@@ -105,12 +104,9 @@ export function ScheduleSection({
       <EmptyState
         title="Add a trial class first"
         action={
-          <Link
-            href={sectionHref("offerings")}
-            className={secondaryButtonClass}
-          >
-            Go to Trial Classes
-          </Link>
+          <Button asChild variant="outline">
+            <Link href={sectionHref("offerings")}>Go to Trial Classes</Link>
+          </Button>
         }
       >
         Every class time belongs to a trial class, so your agent knows who the
@@ -121,24 +117,18 @@ export function ScheduleSection({
 
   return (
     <div className="flex flex-col gap-6">
-      <Callout>
-        Times are in your school time zone ({timezoneLabel}). Your agent only
-        offers times that come from this schedule and never holds a spot on its
-        own.
-      </Callout>
-
       <section className="flex flex-col gap-4" aria-labelledby="schedule-list">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3
             id="schedule-list"
-            className="text-sm font-semibold text-zinc-100"
+            className="text-sm font-semibold text-foreground"
           >
             Weekly class times
           </h3>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             {windows.length === 0
-              ? "None yet"
-              : `${formatCount(windows.length, "class time")} · ${activeCount} open to families`}
+              ? `Times in ${timezoneLabel}`
+              : `${formatCount(windows.length, "class time")} · ${activeCount} open`}
           </p>
         </div>
 
@@ -147,13 +137,9 @@ export function ScheduleSection({
             title="No class times yet"
             action={
               adding ? null : (
-                <button
-                  type="button"
-                  className={secondaryButtonClass}
-                  onClick={openAddForm}
-                >
+                <Button type="button" variant="outline" onClick={openAddForm}>
                   Add a Class Time
-                </button>
+                </Button>
               )
             }
           >
@@ -166,7 +152,7 @@ export function ScheduleSection({
               windows.some((item) => item.dayOfWeek === day),
             ).map((day) => (
               <section key={day} className="flex flex-col gap-2">
-                <h4 className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+                <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                   {DAY_NAMES[day]}
                 </h4>
                 <ul className="flex flex-col gap-3">
@@ -185,10 +171,7 @@ export function ScheduleSection({
       {adding ? (
         <form ref={formRef} action={formAction} className="flex flex-col gap-6">
           <div ref={addRef}>
-            <FieldGroup
-              title="Add a class time"
-              description="Class times repeat weekly. You can change the number of spots later, and turn a time off when you stop running it."
-            >
+            <FieldGroup title="Add a class time">
               <SelectField
                 label="Trial class"
                 name="trialOfferingId"
@@ -212,7 +195,7 @@ export function ScheduleSection({
                   onValueChange={(value) => setField("dayOfWeek", value)}
                   error={errorFor("dayOfWeek")}
                   options={DAY_OPTIONS}
-                  helper="The class repeats on this day every week."
+                  helper="Repeats on this day every week."
                 />
                 <TextField
                   label="Start time"
@@ -276,13 +259,9 @@ export function ScheduleSection({
         </form>
       ) : (
         <div>
-          <button
-            type="button"
-            className={secondaryButtonClass}
-            onClick={openAddForm}
-          >
+          <Button type="button" variant="outline" onClick={openAddForm}>
             Add a Class Time
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -291,13 +270,13 @@ export function ScheduleSection({
 
 function WindowRow({ item }: { item: ScheduleWindowItem }) {
   return (
-    <li className="flex flex-col gap-4 rounded-xl border border-zinc-900 bg-zinc-950/40 p-4">
+    <li className="flex flex-col gap-4 rounded-lg border bg-card p-4">
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium text-zinc-100 tabular-nums">
+          <p className="text-sm font-medium text-foreground tabular-nums">
             {formatTimeRange(item.startMinute, item.durationMinutes)}
           </p>
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-muted-foreground">
             {formatDuration(item.durationMinutes)}
           </span>
           {item.active ? (
@@ -309,12 +288,12 @@ function WindowRow({ item }: { item: ScheduleWindowItem }) {
             <Badge tone="warning">Upcoming bookings</Badge>
           ) : null}
         </div>
-        <p className="text-sm text-zinc-400 text-pretty">
-          {item.offeringName}
+        <p className="text-sm text-muted-foreground text-pretty">
+          <span className="text-foreground">{item.offeringName}</span>
           {item.offeringActive ? "" : " · trial class is not offered"}
           {item.label ? ` · ${item.label}` : ""}
         </p>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-muted-foreground">
           {formatCount(item.capacity, "spot")} per class
           {item.maxUpcomingBooked > 0
             ? ` · ${formatCount(item.maxUpcomingBooked, "student")} booked in an upcoming class`
@@ -337,25 +316,19 @@ function WindowRow({ item }: { item: ScheduleWindowItem }) {
             pendingLabel="Turning off…"
             confirm={{
               title: "Turn off this class time?",
-              body: (
-                <>
-                  Families will stop seeing it when they book a trial. Bookings
-                  already made stay in place, and this cannot be turned back on
-                  from settings yet — you would add a new class time instead.
-                </>
-              ),
+              body: "Families will stop seeing it when they book a trial. Bookings already made stay in place, and this cannot be turned back on from settings yet — you would add a new class time instead.",
               confirmLabel: "Turn It Off",
             }}
           />
         ) : (
-          <p className="text-xs text-zinc-500 text-pretty">
+          <p className="max-w-prose text-xs text-muted-foreground text-pretty">
             Turned off. Reopening a class time is not available yet — add a new
             one with the same day and time.
           </p>
         )}
 
         {item.onCalendar ? (
-          <p className="max-w-prose text-xs text-zinc-500 text-pretty">
+          <p className="max-w-prose text-xs text-muted-foreground text-pretty">
             This time is already on your calendar, so it cannot be deleted. Turn
             it off to stop offering it.
           </p>
@@ -368,12 +341,7 @@ function WindowRow({ item }: { item: ScheduleWindowItem }) {
             variant="danger"
             confirm={{
               title: "Delete this class time?",
-              body: (
-                <>
-                  It disappears from your weekly schedule. Nobody has booked it
-                  yet, so no family is affected. This cannot be undone.
-                </>
-              ),
+              body: "It disappears from your weekly schedule. Nobody has booked it yet, so no family is affected. This cannot be undone.",
               confirmLabel: "Delete Class Time",
             }}
           />
@@ -412,7 +380,7 @@ function CapacityForm({
     <form
       ref={formRef}
       action={formAction}
-      className="flex flex-col gap-3 border-t border-zinc-900 pt-3 sm:flex-row sm:items-end"
+      className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-end"
     >
       <input type="hidden" name="id" value={id} />
       <div className="w-full sm:max-w-40">
@@ -434,29 +402,26 @@ function CapacityForm({
         />
       </div>
       <div className="flex flex-wrap items-center gap-2 pb-1">
-        <button
+        <Button
           type="submit"
-          className={secondaryButtonClass}
+          variant="outline"
+          size="sm"
           disabled={pending || !dirty}
           aria-busy={pending || undefined}
         >
           {pending ? "Saving…" : "Update Spots"}
-        </button>
+        </Button>
         {dirty && !pending ? (
-          <button
-            type="button"
-            className={secondaryButtonClass}
-            onClick={reset}
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={reset}>
             Discard
-          </button>
+          </Button>
         ) : null}
         {state.status === "error" || (state.status === "success" && !dirty) ? (
           <p
             role="status"
             aria-live="polite"
             className={`text-xs text-pretty ${
-              state.status === "error" ? "text-red-400" : "text-emerald-300"
+              state.status === "error" ? "text-destructive" : "text-success"
             }`}
           >
             {state.message}

@@ -1,5 +1,10 @@
+import { formatInTimeZone } from "date-fns-tz";
 import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
+import { ExternalLink, TriangleAlert } from "lucide-react";
 import { headers } from "next/headers";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { getDb } from "@/db";
 import {
   bookings,
@@ -22,7 +27,7 @@ export default async function DashboardPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { school } = await requireOwnedSchool();
-  const params = await searchParams;
+  await searchParams;
   const db = getDb();
   const now = new Date();
 
@@ -117,76 +122,214 @@ export default async function DashboardPage({
     qualifiedCount === 0
       ? 0
       : Math.round((convertedCount / qualifiedCount) * 1000) / 10;
+  const activeOfferingCount = offeringCount[0]?.count ?? 0;
+  const activeWindowCount = windowCount[0]?.count ?? 0;
+  const failedEmailCount = failedEmail[0]?.count ?? 0;
   const headerList = await headers();
   const publicUrl = school.publishedAt
     ? publicSchoolUrl(school.slug, headerList)
     : null;
 
+  // Mirrors publishSchoolAction's server-side readiness check.
+  const published = school.publishedAt != null;
+  const ready = Boolean(
+    school.approvedAt &&
+      school.previewedAt &&
+      school.name &&
+      school.slug &&
+      school.timezone &&
+      school.notificationEmail &&
+      (school.city || school.address) &&
+      activeOfferingCount > 0 &&
+      activeWindowCount > 0,
+  );
+
+  const unmet: string[] = [];
+  if (!published) {
+    if (!school.approvedAt) unmet.push("Awaiting approval");
+    if (!school.previewedAt) unmet.push("Preview the page");
+    if (!(school.city || school.address)) unmet.push("Add a city or address");
+    if (activeOfferingCount === 0) unmet.push("Add a trial class");
+    if (activeWindowCount === 0) unmet.push("Add a weekly class time");
+  }
+
   return (
-    <main className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
-      {params.error === "not_ready" ? (
-        <p className="text-sm text-red-400">
-          Publishing needs approval, a completed preview, location/contact
-          facts, and at least one active offering and window.
-        </p>
-      ) : null}
-      <section className="rounded-xl border border-zinc-800 p-4 text-sm">
-        <p>Status: {school.publishedAt ? "Published" : "Unpublished"}</p>
-        <p>
-          Approved:{" "}
-          {school.approvedAt
-            ? "yes"
-            : "no (local: ALLOW_SELF_APPROVAL or set approved_at in Studio)"}
-        </p>
-        <p>Previewed: {school.previewedAt ? "yes" : "no"}</p>
-        {publicUrl ? <p>Public URL: {publicUrl}</p> : null}
-        <div className="mt-4 flex gap-3">
+    <main id="main-content" className="flex flex-col gap-6 px-4 py-6 md:px-6">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-[22px] leading-7 font-semibold tracking-tight">
+          Overview
+        </h1>
+        {published ? (
+          <Badge variant="success">Published</Badge>
+        ) : (
+          <Badge variant="muted">Unpublished</Badge>
+        )}
+      </header>
+
+      <section className="flex flex-col gap-3 rounded-lg border bg-card p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {publicUrl ? (
+            <a
+              href={publicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            >
+              Open public page
+              <ExternalLink aria-hidden="true" className="size-3.5" />
+            </a>
+          ) : null}
+        </div>
+
+        {unmet.length > 0 ? (
+          <>
+            <p className="text-sm font-medium text-foreground">
+              To publish, finish:
+            </p>
+            <ul className="flex flex-col gap-1">
+              {unmet.map((item) => (
+                <li
+                  key={item}
+                  className="text-sm leading-relaxed text-muted-foreground"
+                >
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
           <form action={markPreviewedAction}>
-            <button
-              type="submit"
-              className="rounded-full border border-zinc-600 px-4 py-2"
-            >
-              Preview landing page
-            </button>
+            <Button type="submit" variant="outline" size="sm">
+              Preview
+            </Button>
           </form>
-          <form action={publishSchoolAction}>
-            <button
-              type="submit"
-              className="rounded-full bg-foreground px-4 py-2 text-background"
-            >
-              Publish
-            </button>
-          </form>
+          {!published && ready ? (
+            <form action={publishSchoolAction}>
+              <Button type="submit" size="sm">
+                Publish
+              </Button>
+            </form>
+          ) : null}
         </div>
       </section>
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-        <Stat label="Qualified sessions" value={qualifiedCount} />
-        <Stat label="Converted sessions" value={convertedCount} />
-        <Stat label="Conversion rate" value={`${conversionRate}%`} />
-        <Stat
-          label="Chat-assisted bookings"
-          value={chatConverted[0]?.count ?? 0}
+
+      <section
+        aria-label="Business summary"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+      >
+        <SummaryStat
+          label="Upcoming bookings"
+          value={upcoming[0]?.count ?? 0}
         />
-        <Stat label="Leads" value={leadCount[0]?.count ?? 0} />
-        <Stat label="Upcoming bookings" value={upcoming[0]?.count ?? 0} />
-        <Stat label="Active offerings" value={offeringCount[0]?.count ?? 0} />
-        <Stat label="Active windows" value={windowCount[0]?.count ?? 0} />
-        <Stat label="Email failures" value={failedEmail[0]?.count ?? 0} />
-        <Stat
-          label="Last maintenance"
-          value={lastRun[0]?.finishedAt?.toISOString() ?? "never"}
+        <SummaryStat label="Leads" value={leadCount[0]?.count ?? 0} />
+        <SummaryStat
+          label="Conversion rate"
+          value={`${conversionRate}%`}
+          title="Converted sessions ÷ qualified sessions"
         />
       </section>
+
+      <section className="rounded-lg border bg-card p-4">
+        <h2 className="text-sm font-semibold text-foreground">Funnel</h2>
+        <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
+          <DetailStat
+            label="Qualified sessions"
+            value={qualifiedCount}
+            title="Sessions where a family shared contact details"
+          />
+          <DetailStat
+            label="Converted sessions"
+            value={convertedCount}
+            title="Qualified sessions that booked a trial class"
+          />
+          <DetailStat
+            label="Chat-assisted bookings"
+            value={chatConverted[0]?.count ?? 0}
+            title="Bookings completed with help from the chat agent"
+          />
+          <DetailStat
+            label="Active trial classes"
+            value={activeOfferingCount}
+          />
+          <DetailStat label="Active class times" value={activeWindowCount} />
+        </dl>
+      </section>
+
+      <details className="group rounded-lg border bg-card">
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60">
+          System status
+          {failedEmailCount > 0 ? (
+            <TriangleAlert aria-hidden="true" className="size-4 text-warning" />
+          ) : null}
+        </summary>
+        <div className="px-4 pb-4">
+          <Separator className="mb-3" />
+          <dl className="flex flex-col gap-2 text-sm">
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">Email failures</dt>
+              <dd>
+                {failedEmailCount > 0 ? (
+                  <Badge variant="warning">{failedEmailCount} failed</Badge>
+                ) : (
+                  <span className="text-foreground">0</span>
+                )}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">Last maintenance</dt>
+              <dd className="text-foreground">
+                {lastRun[0]?.finishedAt
+                  ? formatInTimeZone(
+                      lastRun[0].finishedAt,
+                      school.timezone,
+                      "MMM d, yyyy, h:mm a",
+                    )
+                  : "Never"}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </details>
     </main>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+function SummaryStat({
+  label,
+  value,
+  title,
+}: {
+  label: string;
+  value: string | number;
+  title?: string;
+}) {
   return (
-    <div className="rounded-xl border border-zinc-800 p-4">
-      <p className="text-zinc-500">{label}</p>
-      <p className="mt-2 text-xl font-medium">{value}</p>
+    <div className="rounded-lg border bg-card p-4" title={title}>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1.5 text-xl leading-7 font-semibold tabular-nums">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function DetailStat({
+  label,
+  value,
+  title,
+}: {
+  label: string;
+  value: string | number;
+  title?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5" title={title}>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium tabular-nums text-foreground">
+        {value}
+      </dd>
     </div>
   );
 }

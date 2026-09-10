@@ -1,7 +1,8 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Badge, secondaryButtonClass } from "./controls";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 /**
  * A visual preview of owner-facing settings. It shows how content is laid out
@@ -24,26 +25,28 @@ export function PreviewPanel({
   return (
     <aside className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-100">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           {title}
-          {dirty ? <Badge tone="warning">Unsaved</Badge> : null}
+          {dirty ? <Badge variant="warning">Unsaved</Badge> : null}
         </h3>
-        <button
+        <Button
           type="button"
-          className={`${secondaryButtonClass} lg:hidden`}
+          variant="outline"
+          size="sm"
+          className="lg:hidden"
           aria-expanded={open}
           aria-controls={bodyId}
           onClick={() => setOpen((value) => !value)}
         >
           {open ? "Hide Preview" : "Show Preview"}
-        </button>
+        </Button>
       </div>
       <div
         id={bodyId}
         className={`flex-col gap-3 ${open ? "flex" : "hidden lg:flex"}`}
       >
         {children}
-        <p className="text-xs leading-relaxed text-zinc-500 text-pretty">
+        <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
           {dirty ? `Showing your unsaved edits. ${note}` : note}
         </p>
       </div>

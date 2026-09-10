@@ -8,12 +8,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { IDLE_STATE, type SettingsFormState } from "../form-state";
 import {
-  dangerButtonClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-} from "./controls";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { IDLE_STATE, type SettingsFormState } from "../form-state";
 import { useDirtyRegistration } from "./dirty-context";
 
 export type SettingsAction = (
@@ -156,19 +163,19 @@ export function SectionStatus({
   idleHint?: string;
 }) {
   let message = idleHint ?? "";
-  let tone = "text-zinc-500";
+  let tone = "text-muted-foreground";
   if (pending) {
     message = "Saving…";
-    tone = "text-zinc-300";
+    tone = "text-foreground";
   } else if (state.status === "error") {
     message = state.message ?? "That did not save.";
-    tone = "text-red-400";
+    tone = "text-destructive";
   } else if (dirty) {
     message = "Unsaved changes";
-    tone = "text-amber-300";
+    tone = "text-warning";
   } else if (state.status === "success") {
     message = state.message ?? "Saved.";
-    tone = "text-emerald-300";
+    tone = "text-success";
   }
 
   return (
@@ -201,24 +208,23 @@ export function SaveBar({
   idleHint?: string;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-t border-zinc-900 pt-4 sm:flex-row-reverse sm:items-center">
+    <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row-reverse sm:items-center">
       <div className="flex shrink-0 gap-2">
-        <button
+        <Button
           type="submit"
-          className={primaryButtonClass}
           disabled={pending}
           aria-busy={pending || undefined}
         >
           {pending ? savingLabel : saveLabel}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className={secondaryButtonClass}
+          variant="outline"
           onClick={onDiscard}
           disabled={!dirty || pending}
         >
           Discard
-        </button>
+        </Button>
       </div>
       <SectionStatus
         state={state}
@@ -253,70 +259,69 @@ export function ItemActionForm({
 }) {
   const [state, formAction, pending] = useActionState(action, IDLE_STATE);
   const formRef = useRef<HTMLFormElement>(null);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const buttonClass =
-    variant === "danger" ? dangerButtonClass : secondaryButtonClass;
+  const destructive = variant === "danger";
 
   return (
     <div className={`flex min-w-0 flex-col gap-1 ${className ?? ""}`}>
-      <form ref={formRef} action={formAction}>
+      <form ref={formRef} action={formAction} className="contents">
         <input type="hidden" name="id" value={id} />
-        <button
-          type={confirm ? "button" : "submit"}
-          className={buttonClass}
-          disabled={pending}
-          aria-busy={pending || undefined}
-          onClick={confirm ? () => dialogRef.current?.showModal() : undefined}
-        >
-          {pending ? pendingLabel : label}
-        </button>
+        {confirm ? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant={destructive ? "ghost" : "outline"}
+                size="sm"
+                disabled={pending}
+                aria-busy={pending || undefined}
+                className={
+                  destructive
+                    ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    : undefined
+                }
+              >
+                {pending ? pendingLabel : label}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{confirm.title}</AlertDialogTitle>
+                <AlertDialogDescription>{confirm.body}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel type="button">Keep it</AlertDialogCancel>
+                <AlertDialogAction
+                  type="button"
+                  variant="destructive"
+                  onClick={() => formRef.current?.requestSubmit()}
+                >
+                  {confirm.confirmLabel}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : (
+          <Button
+            type="submit"
+            variant={destructive ? "destructive" : "outline"}
+            size="sm"
+            disabled={pending}
+            aria-busy={pending || undefined}
+          >
+            {pending ? pendingLabel : label}
+          </Button>
+        )}
       </form>
       {state.status !== "idle" ? (
         <p
           role="status"
           aria-live="polite"
           className={`text-xs leading-relaxed text-pretty ${
-            state.status === "error" ? "text-red-400" : "text-emerald-300"
+            state.status === "error" ? "text-destructive" : "text-success"
           }`}
         >
           {state.message}
         </p>
-      ) : null}
-      {confirm ? (
-        <dialog
-          ref={dialogRef}
-          aria-labelledby={`${id}-confirm-title`}
-          className="m-auto w-[min(28rem,calc(100vw-2rem))] overscroll-contain rounded-2xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 backdrop:bg-black/60"
-        >
-          <h2
-            id={`${id}-confirm-title`}
-            className="text-base font-semibold text-balance"
-          >
-            {confirm.title}
-          </h2>
-          <div className="mt-2 text-sm leading-relaxed text-zinc-400 text-pretty">
-            {confirm.body}
-          </div>
-          <div className="mt-6 flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              className={secondaryButtonClass}
-              onClick={() => dialogRef.current?.close()}
-            >
-              Keep it
-            </button>
-            <button
-              type="button"
-              className={dangerButtonClass}
-              onClick={() => {
-                dialogRef.current?.close();
-                formRef.current?.requestSubmit();
-              }}
-            >
-              {confirm.confirmLabel}
-            </button>
-          </div>
-        </dialog>
       ) : null}
     </div>
   );

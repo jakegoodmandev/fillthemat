@@ -1,15 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { createOfferingAction, toggleOfferingAction } from "../actions";
 import { formatAgeRange, formatCount } from "../format";
 import { LIMITS } from "../schemas";
 import {
   Badge,
-  Callout,
   EmptyState,
   FieldGroup,
-  secondaryButtonClass,
   TextAreaField,
   TextField,
 } from "../ui/controls";
@@ -68,24 +67,18 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <Callout>
-        Trial classes decide who your agent says yes to. A parent whose child
-        falls outside every age range is told the child is not eligible, so keep
-        the ranges accurate.
-      </Callout>
-
       <section className="flex flex-col gap-3" aria-labelledby="offerings-list">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3
             id="offerings-list"
-            className="text-sm font-semibold text-zinc-100"
+            className="text-sm font-semibold text-foreground"
           >
             Your trial classes
           </h3>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             {offerings.length === 0
               ? "None yet"
-              : `${formatCount(offerings.length, "class")} · ${activeCount} offered to families`}
+              : `${formatCount(offerings.length, "class")} · ${activeCount} offered`}
           </p>
         </div>
 
@@ -94,13 +87,9 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
             title="No trial classes yet"
             action={
               adding ? null : (
-                <button
-                  type="button"
-                  className={secondaryButtonClass}
-                  onClick={openAddForm}
-                >
+                <Button type="button" variant="outline" onClick={openAddForm}>
                   Add a Trial Class
-                </button>
+                </Button>
               )
             }
           >
@@ -112,11 +101,11 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
             {offerings.map((offering) => (
               <li
                 key={offering.id}
-                className="flex flex-col gap-3 rounded-xl border border-zinc-900 bg-zinc-950/40 p-4 sm:flex-row sm:items-start sm:justify-between"
+                className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-start sm:justify-between"
               >
                 <div className="flex min-w-0 flex-col gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="text-sm font-medium text-zinc-100 text-pretty">
+                    <h4 className="text-sm font-medium text-foreground text-pretty">
                       {offering.name}
                     </h4>
                     {offering.active ? (
@@ -129,27 +118,27 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
                     </Badge>
                   </div>
                   {offering.description ? (
-                    <p className="line-clamp-3 max-w-prose text-sm leading-relaxed text-zinc-400 text-pretty">
+                    <p className="line-clamp-3 max-w-prose text-sm leading-relaxed text-muted-foreground text-pretty">
                       {offering.description}
                     </p>
                   ) : (
-                    <p className="text-sm text-zinc-600">
+                    <p className="text-sm text-muted-foreground">
                       No description yet — your agent will describe it only by
                       name and ages.
                     </p>
                   )}
                   {offering.attire ? (
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-muted-foreground">
                       What to wear: {offering.attire}
                     </p>
                   ) : null}
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-muted-foreground">
                     {offering.windowCount === 0
                       ? "No weekly class times yet — add one in Schedule."
                       : `${formatCount(offering.activeWindowCount, "weekly class time")} available to book`}
                   </p>
                   {!offering.active && offering.activeWindowCount > 0 ? (
-                    <p className="text-xs text-amber-300">
+                    <p className="text-xs text-warning">
                       This class is turned off, so its class times are not
                       offered to families.
                     </p>
@@ -167,14 +156,7 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
                     offering.active
                       ? {
                           title: `Stop offering “${offering.name}”?`,
-                          body: (
-                            <>
-                              Families will no longer be able to book it and
-                              your agent will stop suggesting it. Trials already
-                              booked are not cancelled, and you can turn it back
-                              on at any time.
-                            </>
-                          ),
+                          body: "Families will no longer be able to book it and your agent will stop suggesting it. Trials already booked are not cancelled, and you can turn it back on at any time.",
                           confirmLabel: "Stop Offering",
                         }
                       : undefined
@@ -190,7 +172,7 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
         <form ref={formRef} action={formAction} className="flex flex-col gap-6">
           <FieldGroup
             title="Add a trial class"
-            description="Once added, a trial class can be turned on or off, but not edited or deleted yet."
+            description="A trial class can be turned on or off, but not edited or deleted yet."
           >
             <div ref={nameRef}>
               <TextField
@@ -229,7 +211,7 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
                 value={values.maximumAge}
                 onValueChange={(value) => setField("maximumAge", value)}
                 error={errorFor("maximumAge")}
-                helper="Leave blank for no upper limit."
+                helper="Leave blank for no upper limit. A child outside every age range is told they are not eligible."
                 placeholder="12…"
               />
             </div>
@@ -241,7 +223,7 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
               value={values.description}
               onValueChange={(value) => setField("description", value)}
               error={errorFor("description")}
-              helper="Your agent uses this to explain what the class is."
+              helper="Used by your agent to explain what the class is."
               placeholder="A 45-minute beginner class focused on basics, games, and safety…"
             />
             <TextField
@@ -251,7 +233,7 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
               value={values.attire}
               onValueChange={(value) => setField("attire", value)}
               error={errorFor("attire")}
-              helper="Your agent uses this to answer “what should we wear?”"
+              helper="Answers “what should we wear?”"
               placeholder="Comfortable clothes and bare feet…"
             />
             <TextAreaField
@@ -262,7 +244,7 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
               value={values.expectations}
               onValueChange={(value) => setField("expectations", value)}
               error={errorFor("expectations")}
-              helper="Your agent shares this when a parent asks what the first class is like."
+              helper="Shared when a parent asks what the first class is like."
               placeholder="Warm-up, partner drills with an instructor, and time for questions afterward…"
             />
           </FieldGroup>
@@ -279,13 +261,9 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
         </form>
       ) : (
         <div>
-          <button
-            type="button"
-            className={secondaryButtonClass}
-            onClick={openAddForm}
-          >
+          <Button type="button" variant="outline" onClick={openAddForm}>
             Add a Trial Class
-          </button>
+          </Button>
         </div>
       )}
     </div>

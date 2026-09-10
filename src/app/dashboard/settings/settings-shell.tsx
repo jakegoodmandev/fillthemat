@@ -3,8 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { SECTIONS, type SectionId, sectionHref } from "./sections";
-import { dangerButtonClass, secondaryButtonClass } from "./ui/controls";
 import { DirtyProvider, useDirtyState } from "./ui/dirty-context";
 
 export function SettingsShell({
@@ -27,8 +36,8 @@ export function SettingsShell({
 function SettingsNav({ active }: { active: SectionId }) {
   const router = useRouter();
   const { dirtyKeys } = useDirtyState();
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const clickedRef = useRef<HTMLAnchorElement | null>(null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const hasUnsaved = dirtyKeys.length > 0;
 
@@ -55,16 +64,13 @@ function SettingsNav({ active }: { active: SectionId }) {
     }
     if (!hasUnsaved) return;
     event.preventDefault();
+    clickedRef.current = event.currentTarget;
     setPendingHref(href);
-    dialogRef.current?.showModal();
   };
 
   return (
     <>
-      <nav
-        aria-label="Settings categories"
-        className="lg:w-52 lg:shrink-0 lg:self-start"
-      >
+      <nav aria-label="Settings categories" className="lg:w-52 lg:shrink-0">
         <ul
           ref={listRef}
           className="-mx-1 flex gap-1 overflow-x-auto overscroll-x-contain px-1 pb-2 lg:mx-0 lg:flex-col lg:overflow-x-visible lg:px-0 lg:pb-0"
@@ -80,26 +86,23 @@ function SettingsNav({ active }: { active: SectionId }) {
                   href={href}
                   aria-current={isActive ? "page" : undefined}
                   onClick={(event) => guard(event, href)}
-                  className={`block touch-manipulation rounded-lg border px-3 py-2 text-sm transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70 ${
+                  className={`block touch-manipulation rounded-md border px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 ${
                     isActive
-                      ? "border-zinc-700 bg-zinc-900 text-zinc-100"
-                      : "border-transparent text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-100"
+                      ? "border-transparent bg-accent text-foreground"
+                      : "border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                   }`}
                 >
-                  <span className="flex items-center gap-2 font-medium whitespace-nowrap">
+                  <span className="flex items-center gap-2">
                     {section.label}
                     {dirtyHere ? (
                       <>
                         <span
                           aria-hidden="true"
-                          className="size-1.5 rounded-full bg-amber-400"
+                          className="size-1.5 rounded-full bg-warning"
                         />
                         <span className="sr-only">Unsaved changes</span>
                       </>
                     ) : null}
-                  </span>
-                  <span className="mt-0.5 hidden text-xs text-zinc-500 lg:block">
-                    {section.hint}
                   </span>
                 </Link>
               </li>
@@ -108,47 +111,42 @@ function SettingsNav({ active }: { active: SectionId }) {
         </ul>
       </nav>
 
-      <dialog
-        ref={dialogRef}
-        onClose={() => setPendingHref(null)}
-        aria-labelledby="settings-unsaved-title"
-        className="m-auto w-[min(28rem,calc(100vw-2rem))] overscroll-contain rounded-2xl border border-zinc-800 bg-zinc-950 p-6 text-zinc-100 backdrop:bg-black/60"
+      <AlertDialog
+        open={pendingHref !== null}
+        onOpenChange={(next) => {
+          if (!next) setPendingHref(null);
+        }}
       >
-        <h2
-          id="settings-unsaved-title"
-          className="text-base font-semibold text-balance"
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            clickedRef.current?.focus();
+          }}
         >
-          Leave without saving?
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-400 text-pretty">
-          You have changes that have not been saved yet. If you switch
-          categories now, those edits are lost and your agent keeps using the
-          information it has today.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-end gap-2">
-          <button
-            type="button"
-            className={secondaryButtonClass}
-            onClick={() => {
-              setPendingHref(null);
-              dialogRef.current?.close();
-            }}
-          >
-            Keep Editing
-          </button>
-          <button
-            type="button"
-            className={dangerButtonClass}
-            onClick={() => {
-              dialogRef.current?.close();
-              if (pendingHref) router.push(pendingHref);
-              setPendingHref(null);
-            }}
-          >
-            Discard Changes
-          </button>
-        </div>
-      </dialog>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have changes that have not been saved yet. If you switch
+              categories now, those edits are lost and your agent keeps using
+              the information it has today.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button">Keep Editing</AlertDialogCancel>
+            <AlertDialogAction
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                const href = pendingHref;
+                setPendingHref(null);
+                if (href) router.push(href);
+              }}
+            >
+              Discard Changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

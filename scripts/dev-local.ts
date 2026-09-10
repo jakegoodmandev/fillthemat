@@ -12,9 +12,26 @@ if (port === undefined) {
 }
 
 const extra = process.argv.slice(2);
+// Worktrees share the machine's node_modules via a symlink that points outside
+// the checkout; Turbopack refuses that layout. Webpack follows the symlink, so
+// default to it unless the caller asked for a specific engine.
+const hasEngineFlag =
+  extra.includes("--turbo") ||
+  extra.includes("--turbopack") ||
+  extra.includes("--webpack");
+const engineFlags = hasEngineFlag ? [] : ["--webpack"];
 const result = spawnSync(
   "bun",
-  ["run", "--bun", "next", "dev", "--port", String(port), ...extra],
+  [
+    "run",
+    "--bun",
+    "next",
+    "dev",
+    "--port",
+    String(port),
+    ...engineFlags,
+    ...extra,
+  ],
   {
     stdio: "inherit",
     env: { ...process.env, PORT: String(port) },
