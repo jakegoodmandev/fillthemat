@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/dashboard/page-header";
 import { requireOwnedSchool } from "@/lib/auth/current-school";
 import { listTimezones } from "@/lib/timezones";
 import { formatTimezone } from "./format";
@@ -27,33 +28,17 @@ export default async function SettingsPage({
     [school.address, school.city].filter(Boolean).join(", ") || null;
 
   return (
-    <main className="flex max-w-6xl flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight text-balance">
-          Settings
-        </h1>
-        <p className="max-w-prose text-sm leading-relaxed text-zinc-400 text-pretty">
-          Teach your agent about your school and manage the trial-booking
-          experience.
-        </p>
-      </header>
+    <main id="main-content" className="flex max-w-6xl flex-col gap-5">
+      <PageHeader title="Settings" />
 
       <SettingsShell activeSection={section}>
         <section
-          className="flex flex-col gap-6"
+          className="flex flex-col gap-5"
           aria-labelledby="section-title"
         >
-          <div className="flex flex-col gap-2">
-            <h2
-              id="section-title"
-              className="text-lg font-semibold text-zinc-100 text-balance"
-            >
-              {meta.title}
-            </h2>
-            <p className="max-w-prose text-sm leading-relaxed text-zinc-400 text-pretty">
-              {meta.purpose}
-            </p>
-          </div>
+          <h2 id="section-title" className="text-lg font-semibold">
+            {meta.title}
+          </h2>
           <SectionContent
             section={section}
             schoolId={school.id}

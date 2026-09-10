@@ -4,6 +4,11 @@ Implements the first pass of `docs/settings-ux-research.md`. The seven categorie
 are unchanged: Profile (“School”), Offerings (“Trial classes”), Schedule,
 Pricing, FAQs, Agent, Branding.
 
+**Presentation:** owner dashboard visuals now follow
+`docs/dashboard-design-system.md` (shared primitives, tokens, AlertDialog).
+Route IDs, `sectionHref()`, form-state, and authorization contracts in this
+file still apply.
+
 Design thesis: the owner is teaching a helpful receptionist about their school,
 not editing an AI configuration database.
 

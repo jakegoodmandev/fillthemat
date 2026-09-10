@@ -1,19 +1,12 @@
 "use client";
 
 import { useId } from "react";
-
-export const inputClass =
-  "w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 transition-colors duration-150 motion-reduce:transition-none hover:border-zinc-700 focus-visible:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/60 disabled:cursor-not-allowed disabled:border-zinc-900 disabled:bg-zinc-900/60 disabled:text-zinc-400";
-
-export const invalidInputClass = "border-red-500/70 hover:border-red-500/70";
-
-export const buttonBase =
-  "inline-flex h-10 touch-manipulation items-center justify-center gap-2 rounded-full px-4 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-60";
-
-export const primaryButtonClass = `${buttonBase} bg-zinc-100 text-zinc-950 hover:bg-white`;
-export const secondaryButtonClass = `${buttonBase} border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:bg-zinc-900`;
-export const dangerButtonClass = `${buttonBase} border border-red-900 text-red-300 hover:border-red-700 hover:bg-red-950/50`;
-export const quietButtonClass = `${buttonBase} text-zinc-300 underline underline-offset-4 hover:text-zinc-100 px-2`;
+import { Badge as UiBadge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type BaseFieldProps = {
   label: string;
@@ -73,36 +66,35 @@ function FieldShell({
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <label
-          htmlFor={controlId}
-          className="text-sm font-medium text-zinc-200"
-        >
+        <Label htmlFor={controlId}>
           {label}
           {required ? (
-            <span className="ml-1 text-zinc-500" aria-hidden="true">
+            <span className="ml-1 text-muted-foreground" aria-hidden="true">
               *
             </span>
           ) : null}
-        </label>
-        {badge ? (
-          <span className="rounded-full border border-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">
-            {badge}
-          </span>
-        ) : null}
+        </Label>
+        {badge ? <UiBadge variant="muted">{badge}</UiBadge> : null}
       </div>
       {children}
       {helper || count ? (
         <div className="flex flex-wrap items-baseline justify-between gap-x-3">
           {helper ? (
-            <p id={helperId} className="text-xs leading-relaxed text-zinc-400">
+            <p
+              id={helperId}
+              className="text-xs leading-relaxed text-muted-foreground"
+            >
               {helper}
             </p>
           ) : null}
           {count ? (
             <p
-              className={`text-xs tabular-nums ${
-                count.value > count.max ? "text-red-400" : "text-zinc-500"
-              }`}
+              className={cn(
+                "text-xs tabular-nums",
+                count.value > count.max
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+              )}
             >
               {count.value.toLocaleString("en-US")} /{" "}
               {count.max.toLocaleString("en-US")}
@@ -111,7 +103,7 @@ function FieldShell({
         </div>
       ) : null}
       {error ? (
-        <p id={errorId} className="text-xs font-medium text-red-400">
+        <p id={errorId} className="text-xs font-medium text-destructive">
           {error}
         </p>
       ) : null}
@@ -172,7 +164,7 @@ export function TextField({
           : undefined
       }
     >
-      <input
+      <Input
         id={controlId}
         name={name}
         type={type}
@@ -190,7 +182,7 @@ export function TextField({
         aria-describedby={describedBy(helperId, helper, errorId, error)}
         aria-invalid={error ? true : undefined}
         aria-required={required || undefined}
-        className={`${inputClass} ${error ? invalidInputClass : ""} ${className ?? ""}`}
+        className={className}
       />
     </FieldShell>
   );
@@ -235,7 +227,7 @@ export function TextAreaField({
           : undefined
       }
     >
-      <textarea
+      <Textarea
         id={controlId}
         name={name}
         rows={rows}
@@ -247,7 +239,6 @@ export function TextAreaField({
         aria-describedby={describedBy(helperId, helper, errorId, error)}
         aria-invalid={error ? true : undefined}
         aria-required={required || undefined}
-        className={`${inputClass} resize-y ${error ? invalidInputClass : ""}`}
       />
     </FieldShell>
   );
@@ -281,7 +272,7 @@ export function SelectField({
       required={required}
       badge={badge}
     >
-      <select
+      <NativeSelect
         id={controlId}
         name={name}
         value={value}
@@ -290,21 +281,19 @@ export function SelectField({
         aria-describedby={describedBy(helperId, helper, errorId, error)}
         aria-invalid={error ? true : undefined}
         aria-required={required || undefined}
-        className={`${inputClass} bg-zinc-950 text-zinc-100 ${error ? invalidInputClass : ""}`}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
         ))}
-      </select>
+      </NativeSelect>
     </FieldShell>
   );
 }
 
 export function FieldGroup({
   title,
-  description,
   children,
 }: {
   title: string;
@@ -312,15 +301,8 @@ export function FieldGroup({
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className="flex flex-col gap-4 rounded-xl border border-zinc-900 bg-zinc-950/40 p-4 sm:p-5">
-      <legend className="px-1 text-sm font-semibold text-zinc-100">
-        {title}
-      </legend>
-      {description ? (
-        <p className="-mt-2 text-sm leading-relaxed text-zinc-400 text-pretty">
-          {description}
-        </p>
-      ) : null}
+    <fieldset className="flex flex-col gap-3">
+      <legend className="mb-1 text-base font-semibold">{title}</legend>
       {children}
     </fieldset>
   );
@@ -336,15 +318,18 @@ export function Callout({
   children: React.ReactNode;
 }) {
   const tones = {
-    neutral: "border-zinc-800 bg-zinc-900/40 text-zinc-300",
-    locked: "border-zinc-800 bg-zinc-900/60 text-zinc-300",
-    warning: "border-amber-900/70 bg-amber-950/30 text-amber-200",
+    neutral: "border-border text-muted-foreground",
+    locked: "border-border text-muted-foreground",
+    warning: "border-warning/40 text-warning",
   } as const;
   return (
     <div
-      className={`rounded-xl border px-4 py-3 text-sm leading-relaxed text-pretty ${tones[tone]}`}
+      className={cn(
+        "rounded-md border px-3 py-2 text-sm text-pretty",
+        tones[tone],
+      )}
     >
-      {title ? <p className="font-medium">{title}</p> : null}
+      {title ? <p className="font-medium text-foreground">{title}</p> : null}
       <div className={title ? "mt-1" : undefined}>{children}</div>
     </div>
   );
@@ -357,19 +342,13 @@ export function Badge({
   tone?: "neutral" | "muted" | "active" | "warning";
   children: React.ReactNode;
 }) {
-  const tones = {
-    neutral: "border-zinc-700 text-zinc-300",
-    muted: "border-zinc-800 text-zinc-500",
-    active: "border-emerald-800 text-emerald-300",
-    warning: "border-amber-800 text-amber-300",
+  const variant = {
+    neutral: "outline",
+    muted: "muted",
+    active: "success",
+    warning: "warning",
   } as const;
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${tones[tone]}`}
-    >
-      {children}
-    </span>
-  );
+  return <UiBadge variant={variant[tone]}>{children}</UiBadge>;
 }
 
 export function EmptyState({
@@ -382,9 +361,9 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-zinc-800 px-4 py-6 sm:px-6">
-      <p className="text-sm font-medium text-zinc-200">{title}</p>
-      <p className="max-w-prose text-sm leading-relaxed text-zinc-400 text-pretty">
+    <div className="flex flex-col items-start gap-2 py-2">
+      <p className="text-sm font-medium">{title}</p>
+      <p className="max-w-prose text-sm leading-relaxed text-muted-foreground text-pretty">
         {children}
       </p>
       {action}

@@ -1,9 +1,19 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { eq } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 import { getDb } from "../src/db";
-import { schools, trialOfferings, trialWindows, users } from "../src/db/schema";
+import {
+  bookings,
+  contacts,
+  participants,
+  schools,
+  trialOccurrences,
+  trialOfferings,
+  trialWindows,
+  users,
+} from "../src/db/schema";
+import { bookingIcsUid } from "../src/lib/email/ics";
 import { parseSupabaseStatusEnv, readEnvFile } from "./local-env";
 import { fail, tryCapture } from "./local-process";
 
@@ -150,27 +160,186 @@ export async function seedLocal() {
   }
   if (!offeringId) fail("Could not seed trial offering.");
 
-  const [window] = await db
+  let [window] = await db
     .select()
     .from(trialWindows)
     .where(eq(trialWindows.schoolId, schoolId))
     .limit(1);
   if (!window) {
-    await db.insert(trialWindows).values({
-      schoolId,
-      trialOfferingId: offeringId,
-      dayOfWeek: 1,
-      startMinute: 18 * 60,
-      durationMinutes: 60,
-      capacity: 8,
-      label: "Monday 6pm",
-      active: true,
-    });
+    const [createdWindow] = await db
+      .insert(trialWindows)
+      .values({
+        schoolId,
+        trialOfferingId: offeringId,
+        dayOfWeek: 1,
+        startMinute: 18 * 60,
+        durationMinutes: 60,
+        capacity: 8,
+        label: "Monday 6pm",
+        active: true,
+      })
+      .returning();
+    window = createdWindow;
   }
+  if (!window) fail("Could not seed class time.");
+
+  const [school] = await db
+    .select()
+    .from(schools)
+    .where(eq(schools.id, schoolId))
+    .limit(1);
+  if (!school) fail("Could not load demo school.");
+  await seedUpcomingBooking({
+    schoolId,
+    timezone: school.timezone,
+    offeringId,
+    offeringName: offering?.name ?? "Kids beginner trial",
+    windowId: window.id,
+    capacity: window.capacity,
+    durationMinutes: window.durationMinutes,
+  });
 
   console.log(
     `Seeded ${LOCAL_OWNER_EMAIL} / ${LOCAL_OWNER_PASSWORD} with school /s/${LOCAL_SCHOOL_SLUG} (approved, unpublished).`,
   );
+}
+
+const DEMO_CONTACT_EMAIL = "family@local.test";
+const DEMO_BOOKING_KEY = "seed:demo-upcoming";
+
+async function seedUpcomingBooking({
+  schoolId,
+  timezone,
+  offeringId,
+  offeringName,
+  windowId,
+  capacity,
+  durationMinutes,
+}: {
+  schoolId: string;
+  timezone: string;
+  offeringId: string;
+  offeringName: string;
+  windowId: string;
+  capacity: number;
+  durationMinutes: number;
+}) {
+  const db = getDb();
+  const now = new Date();
+  const [existing] = await db
+    .select({ id: bookings.id })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.schoolId, schoolId),
+        eq(bookings.status, "booked"),
+        gte(bookings.startAt, now),
+      ),
+    )
+    .limit(1);
+  if (existing) return;
+
+  const startAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const endAt = new Date(startAt.getTime() + durationMinutes * 60 * 1000);
+
+  const [contact] = await db
+    .insert(contacts)
+    .values({
+      schoolId,
+      email: DEMO_CONTACT_EMAIL,
+      name: "Alex Rivera",
+      phone: "555-0199",
+    })
+    .onConflictDoUpdate({
+      target: [contacts.schoolId, contacts.email],
+      set: { name: "Alex Rivera", phone: "555-0199", updatedAt: new Date() },
+    })
+    .returning();
+  if (!contact) fail("Could not seed demo contact.");
+
+  const [participant] = await db
+    .insert(participants)
+    .values({
+      schoolId,
+      contactId: contact.id,
+      name: "Sam Rivera",
+      normalizedName: "sam rivera",
+    })
+    .onConflictDoUpdate({
+      target: [participants.contactId, participants.normalizedName],
+      set: { name: "Sam Rivera", updatedAt: new Date() },
+    })
+    .returning();
+  if (!participant) fail("Could not seed demo participant.");
+
+  await db
+    .insert(trialOccurrences)
+    .values({
+      schoolId,
+      trialWindowId: windowId,
+      trialOfferingId: offeringId,
+      startAt,
+      endAt,
+      capacity,
+      bookedCount: 0,
+    })
+    .onConflictDoNothing({
+      target: [trialOccurrences.trialWindowId, trialOccurrences.startAt],
+    });
+
+  const [occurrence] = await db
+    .select()
+    .from(trialOccurrences)
+    .where(
+      and(
+        eq(trialOccurrences.schoolId, schoolId),
+        eq(trialOccurrences.trialWindowId, windowId),
+        eq(trialOccurrences.startAt, startAt),
+      ),
+    )
+    .limit(1);
+  if (!occurrence) fail("Could not seed demo occurrence.");
+
+  const [booking] = await db
+    .insert(bookings)
+    .values({
+      schoolId,
+      contactId: contact.id,
+      participantId: participant.id,
+      trialOfferingId: offeringId,
+      trialWindowId: windowId,
+      trialOccurrenceId: occurrence.id,
+      idempotencyKey: DEMO_BOOKING_KEY,
+      status: "booked",
+      participantNameSnapshot: "Sam Rivera",
+      participantAgeSnapshot: 8,
+      offeringNameSnapshot: offeringName,
+      timezoneSnapshot: timezone,
+      startAt,
+      endAt,
+      contactEmailSnapshot: DEMO_CONTACT_EMAIL,
+      contactNameSnapshot: "Alex Rivera",
+      contactPhoneSnapshot: "555-0199",
+      icsUid: "pending",
+    })
+    .onConflictDoNothing({
+      target: [bookings.schoolId, bookings.idempotencyKey],
+    })
+    .returning({ id: bookings.id });
+
+  if (booking) {
+    await db
+      .update(bookings)
+      .set({ icsUid: bookingIcsUid(booking.id) })
+      .where(eq(bookings.id, booking.id));
+    await db
+      .update(trialOccurrences)
+      .set({
+        bookedCount: occurrence.bookedCount + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(trialOccurrences.id, occurrence.id));
+  }
 }
 
 if (fileURLToPath(import.meta.url) === resolve(process.argv[1] ?? "")) {

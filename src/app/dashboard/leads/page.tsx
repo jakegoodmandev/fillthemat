@@ -1,4 +1,6 @@
 import { desc, eq } from "drizzle-orm";
+import { formatOwnerDate } from "@/components/dashboard/format";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { getDb } from "@/db";
 import { contacts, leads } from "@/db/schema";
 import { requireOwnedSchool } from "@/lib/auth/current-school";
@@ -17,25 +19,62 @@ export default async function LeadsPage() {
     .orderBy(desc(leads.createdAt));
 
   return (
-    <main className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Leads</h1>
-      <ul className="space-y-3 text-sm">
-        {rows.map(({ lead, contact }) => (
-          <li key={lead.id} className="rounded-xl border border-zinc-800 p-4">
-            <p className="font-medium">
-              {contact.name} · {contact.email} · {contact.phone}
-            </p>
-            <p className="text-zinc-400">
-              {lead.participantName ?? "No participant"}{" "}
-              {lead.participantAge != null
+    <main id="main-content" className="flex flex-col gap-4">
+      <PageHeader title="Leads" />
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No leads yet.</p>
+      ) : (
+        <ul className="divide-y divide-border border-y border-border">
+          {rows.map(({ lead, contact }) => {
+            const participant = [
+              lead.participantName,
+              lead.participantAge != null
                 ? `(age ${lead.participantAge})`
-                : ""}
-            </p>
-            <p>{lead.statedNeed ?? "No stated need"}</p>
-            <p className="text-zinc-500">{lead.createdAt.toISOString()}</p>
-          </li>
-        ))}
-      </ul>
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" ");
+
+            return (
+              <li key={lead.id} className="flex flex-col gap-1 py-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <p className="font-medium text-pretty">{contact.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatOwnerDate(lead.createdAt, school.timezone)}
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {contact.email ? (
+                    <a
+                      href={`mailto:${contact.email}`}
+                      className="break-all underline-offset-4 hover:underline"
+                    >
+                      {contact.email}
+                    </a>
+                  ) : null}
+                  {contact.email && contact.phone ? " · " : null}
+                  {contact.phone ? (
+                    <a
+                      href={`tel:${contact.phone}`}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {contact.phone}
+                    </a>
+                  ) : null}
+                </p>
+                {participant ? (
+                  <p className="text-sm text-pretty">{participant}</p>
+                ) : null}
+                {lead.statedNeed ? (
+                  <p className="text-sm text-pretty break-words">
+                    {lead.statedNeed}
+                  </p>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </main>
   );
 }
