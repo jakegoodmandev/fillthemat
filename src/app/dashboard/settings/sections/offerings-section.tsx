@@ -153,7 +153,8 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
                   setAnnouncement(null);
                   editor.requestOpen({ type: "edit", id: offering.id });
                 }}
-                onCancel={editor.requestCancel}
+                onIdleClose={editor.closeImmediate}
+                onDirtyClose={() => editor.requestCancel(true)}
                 onSuccess={(state, meta) =>
                   onEditSuccess(offering.id, state, meta)
                 }
@@ -173,7 +174,8 @@ export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
       {editor.isCreating ? (
         <div ref={nameRef}>
           <CreateOfferingForm
-            onCancel={editor.requestCancel}
+            onIdleClose={editor.closeImmediate}
+            onDirtyClose={() => editor.requestCancel(true)}
             onSuccess={onCreateSuccess}
             onPendingChange={editor.setSaving}
           />
@@ -205,7 +207,8 @@ function OfferingRow({
   editing,
   categorySaving,
   onEdit,
-  onCancel,
+  onIdleClose,
+  onDirtyClose,
   onSuccess,
   onPendingChange,
   editRef,
@@ -214,7 +217,8 @@ function OfferingRow({
   editing: boolean;
   categorySaving: boolean;
   onEdit: () => void;
-  onCancel: (dirty: boolean) => void;
+  onIdleClose: () => void;
+  onDirtyClose: () => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
   editRef: (node: HTMLButtonElement | null) => void;
@@ -314,7 +318,8 @@ function OfferingRow({
       {editing ? (
         <EditOfferingForm
           offering={offering}
-          onCancel={onCancel}
+          onIdleClose={onIdleClose}
+          onDirtyClose={onDirtyClose}
           onSuccess={onSuccess}
           onPendingChange={onPendingChange}
         />
@@ -324,11 +329,13 @@ function OfferingRow({
 }
 
 function CreateOfferingForm({
-  onCancel,
+  onIdleClose,
+  onDirtyClose,
   onSuccess,
   onPendingChange,
 }: {
-  onCancel: (dirty: boolean) => void;
+  onIdleClose: () => void;
+  onDirtyClose: () => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -369,7 +376,8 @@ function CreateOfferingForm({
         savingLabel="Adding…"
         pending={pending}
         dirty={dirty}
-        onCancel={() => onCancel(dirty)}
+        onCancel={onIdleClose}
+        onCancelDirty={onDirtyClose}
         state={state}
         idleHint="New trial classes are offered to families as soon as they are added."
       />
@@ -379,12 +387,14 @@ function CreateOfferingForm({
 
 function EditOfferingForm({
   offering,
-  onCancel,
+  onIdleClose,
+  onDirtyClose,
   onSuccess,
   onPendingChange,
 }: {
   offering: OfferingItem;
-  onCancel: (dirty: boolean) => void;
+  onIdleClose: () => void;
+  onDirtyClose: () => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -435,7 +445,8 @@ function EditOfferingForm({
         savingLabel="Saving…"
         pending={pending}
         dirty={dirty}
-        onCancel={() => onCancel(dirty)}
+        onCancel={onIdleClose}
+        onCancelDirty={onDirtyClose}
         state={state}
         idleHint="Saved changes are used by your agent right away."
       />

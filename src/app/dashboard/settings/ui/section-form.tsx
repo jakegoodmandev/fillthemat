@@ -199,6 +199,7 @@ export function SaveBar({
   dirty,
   onDiscard,
   onCancel,
+  onCancelDirty,
   cancelLabel = "Cancel",
   state,
   idleHint,
@@ -208,7 +209,10 @@ export function SaveBar({
   pending: boolean;
   dirty: boolean;
   onDiscard?: () => void;
+  /** Idle close — must not run a dirty/confirm check. */
   onCancel?: () => void;
+  /** Only used when the form is dirty. */
+  onCancelDirty?: () => void;
   cancelLabel?: string;
   state: SettingsFormState;
   idleHint?: string;
@@ -217,7 +221,7 @@ export function SaveBar({
     <Button
       type="button"
       variant="outline"
-      onClick={onCancel}
+      onClick={dirty ? (onCancelDirty ?? onCancel) : onCancel}
       disabled={pending}
     >
       {cancelLabel}

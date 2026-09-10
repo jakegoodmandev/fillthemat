@@ -109,7 +109,8 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
                   setAnnouncement(null);
                   editor.requestOpen({ type: "edit", id: faq.id });
                 }}
-                onCancel={editor.requestCancel}
+                onIdleClose={editor.closeImmediate}
+                onDirtyClose={() => editor.requestCancel(true)}
                 onSuccess={(state, meta) => onEditSuccess(faq.id, state, meta)}
                 onPendingChange={editor.setSaving}
                 editRef={(node) => {
@@ -134,7 +135,8 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
           <CreateFaqForm
             key={createQuestion || "blank"}
             initialQuestion={createQuestion}
-            onCancel={editor.requestCancel}
+            onIdleClose={editor.closeImmediate}
+            onDirtyClose={() => editor.requestCancel(true)}
             onSuccess={onCreateSuccess}
             onPendingChange={editor.setSaving}
           />
@@ -185,7 +187,8 @@ function FaqRow({
   editing,
   categorySaving,
   onEdit,
-  onCancel,
+  onIdleClose,
+  onDirtyClose,
   onSuccess,
   onPendingChange,
   editRef,
@@ -194,7 +197,8 @@ function FaqRow({
   editing: boolean;
   categorySaving: boolean;
   onEdit: () => void;
-  onCancel: (dirty: boolean) => void;
+  onIdleClose: () => void;
+  onDirtyClose: () => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
   editRef: (node: HTMLButtonElement | null) => void;
@@ -242,7 +246,8 @@ function FaqRow({
       {editing ? (
         <EditFaqForm
           faq={faq}
-          onCancel={onCancel}
+          onIdleClose={onIdleClose}
+          onDirtyClose={onDirtyClose}
           onSuccess={onSuccess}
           onPendingChange={onPendingChange}
         />
@@ -265,12 +270,14 @@ function FaqRow({
 
 function CreateFaqForm({
   initialQuestion = "",
-  onCancel,
+  onIdleClose,
+  onDirtyClose,
   onSuccess,
   onPendingChange,
 }: {
   initialQuestion?: string;
-  onCancel: (dirty: boolean) => void;
+  onIdleClose: () => void;
+  onDirtyClose: () => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -311,7 +318,8 @@ function CreateFaqForm({
         savingLabel="Adding…"
         pending={pending}
         dirty={dirty}
-        onCancel={() => onCancel(dirty)}
+        onCancel={onIdleClose}
+        onCancelDirty={onDirtyClose}
         state={state}
         idleHint="Your agent can use a new answer as soon as it is added."
       />
@@ -321,12 +329,14 @@ function CreateFaqForm({
 
 function EditFaqForm({
   faq,
-  onCancel,
+  onIdleClose,
+  onDirtyClose,
   onSuccess,
   onPendingChange,
 }: {
   faq: FaqItem;
-  onCancel: (dirty: boolean) => void;
+  onIdleClose: () => void;
+  onDirtyClose: () => void;
   onSuccess: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
   onPendingChange: (pending: boolean) => void;
 }) {
@@ -377,7 +387,8 @@ function EditFaqForm({
         savingLabel="Saving…"
         pending={pending}
         dirty={dirty}
-        onCancel={() => onCancel(dirty)}
+        onCancel={onIdleClose}
+        onCancelDirty={onDirtyClose}
         state={state}
         idleHint="Saved changes are used by your agent right away."
       />
