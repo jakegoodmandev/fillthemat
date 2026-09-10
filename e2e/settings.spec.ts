@@ -163,7 +163,7 @@ test("switching categories with unsaved edits asks first", async ({ page }) => {
     .getByRole("link", { name: /FAQs/ })
     .click();
 
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("alertdialog");
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Keep Editing" }).click();
   await expect(page.locator("#section-title")).toHaveText("Pricing");
@@ -173,7 +173,7 @@ test("switching categories with unsaved edits asks first", async ({ page }) => {
     .getByRole("link", { name: /FAQs/ })
     .click();
   await page
-    .getByRole("dialog")
+    .getByRole("alertdialog")
     .getByRole("button", { name: "Discard Changes" })
     .click();
   await expect(page.locator("#section-title")).toHaveText(
@@ -198,7 +198,9 @@ test("adding and deleting a question requires confirmation to delete", async ({
   await expect(item).toBeVisible();
 
   await item.getByRole("button", { name: "Delete" }).click();
-  const dialog = page.getByRole("dialog", { name: "Delete this question?" });
+  const dialog = page.getByRole("alertdialog", {
+    name: "Delete this question?",
+  });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Delete Question" }).click();
 
@@ -229,14 +231,14 @@ test("a class time can be added, then deleted after confirming", async ({
 
   // Escape closes the confirmation without deleting anything.
   await row.getByRole("button", { name: "Delete" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page.getByRole("alertdialog")).toBeHidden();
   await expect(row).toBeVisible();
 
   await row.getByRole("button", { name: "Delete" }).click();
   await page
-    .getByRole("dialog")
+    .getByRole("alertdialog")
     .getByRole("button", { name: "Delete Class Time" })
     .click();
   await expect(
