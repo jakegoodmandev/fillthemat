@@ -188,16 +188,22 @@ export function SaveBar({
   pending,
   dirty,
   onDiscard,
+  onCancel,
+  cancelLabel = "Cancel",
   state,
   idleHint,
+  hideDiscard = false,
 }: {
   saveLabel: string;
   savingLabel?: string;
   pending: boolean;
   dirty: boolean;
   onDiscard: () => void;
+  onCancel?: () => void;
+  cancelLabel?: string;
   state: SettingsFormState;
   idleHint?: string;
+  hideDiscard?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row-reverse sm:items-center">
@@ -209,14 +215,26 @@ export function SaveBar({
         >
           {pending ? savingLabel : saveLabel}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onDiscard}
-          disabled={!dirty || pending}
-        >
-          Discard
-        </Button>
+        {onCancel ? (
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={onCancel}
+            disabled={pending}
+          >
+            {cancelLabel}
+          </Button>
+        ) : null}
+        {!hideDiscard && !onCancel ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onDiscard}
+            disabled={!dirty || pending}
+          >
+            Discard
+          </Button>
+        ) : null}
       </div>
       <SectionStatus
         state={state}

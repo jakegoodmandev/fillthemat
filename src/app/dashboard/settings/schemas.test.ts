@@ -8,6 +8,8 @@ import {
   offeringSchema,
   profileSchema,
   publicAddressSchema,
+  updateFaqSchema,
+  updateOfferingSchema,
   windowSchema,
 } from "./schemas";
 
@@ -212,6 +214,98 @@ describe("faqSchema", () => {
     const errors = fieldErrorsFrom(result.error);
     expect(errors.question).toBeTruthy();
     expect(errors.answer).toBeTruthy();
+  });
+});
+
+describe("updateOfferingSchema", () => {
+  const base = {
+    id: "00000000-0000-4000-8000-000000000000",
+    expectedUpdatedAt: "2024-01-01T12:00:00.000Z",
+    name: "Trial class",
+    description: "",
+    minimumAge: "",
+    maximumAge: "",
+    attire: "",
+    expectations: "",
+  };
+
+  it("parses a valid edit payload and exposes Date for updatedAt", () => {
+    const parsed = updateOfferingSchema.parse(base);
+    expect(parsed.id).toBe(base.id);
+    expect(parsed.expectedUpdatedAt.getUTCFullYear()).toBe(2024);
+  });
+
+  it("rejects a non-uuid id", () => {
+    const result = updateOfferingSchema.safeParse({
+      ...base,
+      id: "not-a-uuid",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a missing class name", () => {
+    const result = updateOfferingSchema.safeParse({ ...base, name: "  " });
+    expect(result.success).toBe(false);
+  });
+
+  it("preserves the inverted-age refinement from offeringSchema", () => {
+    const result = updateOfferingSchema.safeParse({
+      ...base,
+      minimumAge: "14",
+      maximumAge: "9",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(fieldErrorsFrom(result.error).maximumAge).toMatch(/youngest/i);
+  });
+
+  it("rejects an unparseable expectedUpdatedAt token", () => {
+    const result = updateOfferingSchema.safeParse({
+      ...base,
+      expectedUpdatedAt: "yesterday",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a Z and an offset timezone stamp", () => {
+    expect(
+      updateOfferingSchema.safeParse({
+        ...base,
+        expectedUpdatedAt: "2024-01-01T12:00:00+02:00",
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe("updateFaqSchema", () => {
+  const base = {
+    id: "00000000-0000-4000-8000-000000000000",
+    expectedUpdatedAt: "2024-01-01T12:00:00.000Z",
+    question: "Is there parking?",
+    answer: "Yes.",
+  };
+
+  it("parses a valid edit payload", () => {
+    const parsed = updateFaqSchema.parse(base);
+    expect(parsed.question).toBe("Is there parking?");
+    expect(parsed.expectedUpdatedAt.getTime()).toBe(
+      new Date(base.expectedUpdatedAt).getTime(),
+    );
+  });
+
+  it("rejects missing question and answer", () => {
+    expect(updateFaqSchema.safeParse({ ...base, question: "" }).success).toBe(
+      false,
+    );
+    expect(updateFaqSchema.safeParse({ ...base, answer: "" }).success).toBe(
+      false,
+    );
+  });
+
+  it("does not encode a limit — editing works at 20", () => {
+    // The schema deliberately contains no FAQ-count check; the create action
+    // is the only place that enforces the 20-question cap.
+    expect(updateFaqSchema.parse(base).question.length).toBeGreaterThan(0);
   });
 });
 

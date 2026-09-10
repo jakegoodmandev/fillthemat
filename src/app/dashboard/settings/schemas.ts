@@ -187,6 +187,56 @@ export const offeringSchema = z
     },
   );
 
+/**
+ * Edit a trial class. Shares every edit-able field with `offeringSchema`;
+ * adding `id` for the saved record and `expectedUpdatedAt` for optimistic
+ * concurrency. The `active` flag, `waiverNotes`, and any non-editable fields
+ * are intentionally not surfaced in this parser — the action keeps them
+ * intact when applying the update, so omitting them here matches the
+ * wire-level shape of the form.
+ */
+export const updateOfferingSchema = z
+  .object({
+    id: z.uuid("That trial class no longer exists."),
+    expectedUpdatedAt: z
+      .string()
+      .trim()
+      .refine(
+        (value) =>
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(Z|[+-]\d{2}:?\d{2})$/.test(
+            value,
+          ),
+        "Refresh the page before saving that trial class.",
+      )
+      .transform((value) => new Date(value)),
+    name: required(
+      LIMITS.offeringName,
+      "Name this trial class.",
+      `Keep the name under ${LIMITS.offeringName} characters.`,
+    ),
+    description: optional(
+      LIMITS.offeringDescription,
+      "Shorten the description a little.",
+    ),
+    minimumAge: ageField,
+    maximumAge: ageField,
+    attire: optional(LIMITS.offeringAttire, "Shorten the attire note."),
+    expectations: optional(
+      LIMITS.offeringExpectations,
+      "Shorten what to expect a little.",
+    ),
+  })
+  .refine(
+    (value) =>
+      value.minimumAge == null ||
+      value.maximumAge == null ||
+      value.minimumAge <= value.maximumAge,
+    {
+      message: "The youngest age must be lower than the oldest age.",
+      path: ["maximumAge"],
+    },
+  );
+
 // `<input type="time">` may serialize as HH:MM or HH:MM:SS depending on the
 // browser and step; seconds are accepted and ignored.
 const timeValue = z
@@ -257,6 +307,28 @@ export const faqSchema = z.object({
     `Keep the answer under ${LIMITS.faqAnswer.toLocaleString("en-US")} characters.`,
   ),
 });
+
+/**
+ * Edit an existing FAQ. The 20-question limit applies to creating a new row,
+ * not to correcting one — this parser leaves the cap enforcement to the
+ * create action and lets updating a saved record succeed even at the limit.
+ */
+export const updateFaqSchema = z
+  .object({
+    id: z.uuid("That question no longer exists."),
+    expectedUpdatedAt: z
+      .string()
+      .trim()
+      .refine(
+        (value) =>
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(Z|[+-]\d{2}:?\d{2})$/.test(
+            value,
+          ),
+        "Refresh the page before saving that question.",
+      )
+      .transform((value) => new Date(value)),
+  })
+  .merge(faqSchema);
 
 /** FormData -> plain object of trimmed strings, safe to hand to zod. */
 export function formValues(

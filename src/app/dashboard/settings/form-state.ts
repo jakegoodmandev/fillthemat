@@ -44,5 +44,25 @@ export function errorState(
   return { status: "error", message, fieldErrors, values: null };
 }
 
+/**
+ * A successful save the form should display but not totally celebrate.
+ * Used after a `updatedAt`-based optimistic concurrency conflict so owners
+ * can see the new value without losing their in-flight edit.
+ */
+export function conflictState(
+  message: string,
+  values: Record<string, string>,
+): SettingsFormState {
+  return {
+    status: "error",
+    message,
+    fieldErrors: {},
+    values,
+  };
+}
+
 export const GENERIC_SERVER_ERROR =
   "We could not save that. Nothing changed — try again in a moment.";
+
+export const STALE_EDIT_MESSAGE =
+  "Someone else saved this while you were editing. We kept what you typed — refresh to see the latest values.";

@@ -13,9 +13,11 @@ import {
 } from "@/db/schema";
 import { requireOwnedSchool } from "@/lib/auth/current-school";
 import {
+  conflictState,
   errorState,
   GENERIC_SERVER_ERROR,
   type SettingsFormState,
+  STALE_EDIT_MESSAGE,
   successState,
 } from "./form-state";
 import { formatCount } from "./format";
@@ -32,10 +34,24 @@ import {
   pricingSchema,
   profileSchema,
   publicAddressSchema,
+  updateFaqSchema,
+  updateOfferingSchema,
   windowSchema,
 } from "./schemas";
 
 const SETTINGS_PATH = "/dashboard/settings";
+
+/** Render an `updatedAt` value for the optimistic-concurrency token sent to the form. */
+function updatedAtIso(value: Date): string {
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
+/** True if the saved record's `updatedAt` is still the snapshot the form edited against. */
+function rowUpdated(idle: Date | string, expected: Date): boolean {
+  const idleTime =
+    idle instanceof Date ? idle.getTime() : new Date(idle).getTime();
+  return idleTime === expected.getTime();
+}
 
 function nullToEmpty(value: string | null | undefined): string {
   return value ?? "";
@@ -258,19 +274,117 @@ export async function createOfferingAction(
       );
     }
     const db = getDb();
-    await db.insert(trialOfferings).values({
-      schoolId: school.id,
-      name: parsed.data.name,
-      description: parsed.data.description,
-      minimumAge: parsed.data.minimumAge,
-      maximumAge: parsed.data.maximumAge,
-      expectations: parsed.data.expectations,
-      attire: parsed.data.attire,
-      waiverNotes: parsed.data.waiverNotes,
-      active: true,
-    });
+    const [created] = await db
+      .insert(trialOfferings)
+      .values({
+        schoolId: school.id,
+        name: parsed.data.name,
+        description: parsed.data.description,
+        minimumAge: parsed.data.minimumAge,
+        maximumAge: parsed.data.maximumAge,
+        expectations: parsed.data.expectations,
+        attire: parsed.data.attire,
+        waiverNotes: parsed.data.waiverNotes,
+        active: true,
+      })
+      .returning({ id: trialOfferings.id });
     revalidatePath(SETTINGS_PATH);
-    return successState(`“${parsed.data.name}” added and open for bookings.`);
+    return successState(`“${parsed.data.name}” added and open for bookings.`, {
+      id: created?.id ?? "",
+    });
+  });
+}
+
+/**
+ * Edit an existing trial class. Updates only the fields the form controls;
+ * `active`, `waiverNotes`, and every non-editable column on the row stay as
+ * it was. Uses `updatedAt` as an optimistic concurrency token so two owners
+ * cannot silently overwrite each other.
+ */
+export async function updateOfferingAction(
+  _prev: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  return run(async () => {
+    const { school } = await requireOwnedSchool();
+    const parsed = updateOfferingSchema.safeParse(
+      formValues(formData, [
+        "id",
+        "expectedUpdatedAt",
+        "name",
+        "description",
+        "minimumAge",
+        "maximumAge",
+        "attire",
+        "expectations",
+      ]),
+    );
+    if (!parsed.success) {
+      return errorState(
+        "Check the highlighted fields and save the trial class again.",
+        fieldErrorsFrom(parsed.error),
+      );
+    }
+    const { id, expectedUpdatedAt, ...values } = parsed.data;
+    const db = getDb();
+    const [existing] = await db
+      .select()
+      .from(trialOfferings)
+      .where(
+        and(eq(trialOfferings.id, id), eq(trialOfferings.schoolId, school.id)),
+      )
+      .limit(1);
+    if (!existing) {
+      return errorState("That trial class no longer exists. Refresh the page.");
+    }
+    if (!rowUpdated(existing.updatedAt, expectedUpdatedAt)) {
+      return conflictState(STALE_EDIT_MESSAGE, {
+        id,
+        expectedUpdatedAt: updatedAtIso(existing.updatedAt),
+        name: existing.name,
+        description: existing.description ?? "",
+        minimumAge:
+          existing.minimumAge == null ? "" : String(existing.minimumAge),
+        maximumAge:
+          existing.maximumAge == null ? "" : String(existing.maximumAge),
+        attire: existing.attire ?? "",
+        expectations: existing.expectations ?? "",
+      });
+    }
+    const updated = await db
+      .update(trialOfferings)
+      .set({
+        name: values.name,
+        description: values.description,
+        minimumAge: values.minimumAge,
+        maximumAge: values.maximumAge,
+        attire: values.attire,
+        expectations: values.expectations,
+        active: existing.active,
+        waiverNotes: existing.waiverNotes,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(trialOfferings.id, id), eq(trialOfferings.schoolId, school.id)),
+      )
+      .returning({ updatedAt: trialOfferings.updatedAt });
+    revalidatePath(SETTINGS_PATH);
+    revalidatePath("/dashboard");
+    return successState(
+      `“${values.name}” saved. Bookings use the new settings.`,
+      {
+        id,
+        expectedUpdatedAt: updated[0]
+          ? updatedAtIso(updated[0].updatedAt)
+          : updatedAtIso(expectedUpdatedAt),
+        name: values.name,
+        description: values.description ?? "",
+        minimumAge: values.minimumAge == null ? "" : String(values.minimumAge),
+        maximumAge: values.maximumAge == null ? "" : String(values.maximumAge),
+        attire: values.attire ?? "",
+        expectations: values.expectations ?? "",
+      },
+    );
   });
 }
 
@@ -533,14 +647,80 @@ export async function createFaqAction(
         `You already have ${LIMITS.faqCount} questions. Delete one before adding another.`,
       );
     }
-    await db.insert(faqs).values({
-      schoolId: school.id,
-      question: parsed.data.question,
-      answer: parsed.data.answer,
-      sortOrder: count,
-    });
+    const [created] = await db
+      .insert(faqs)
+      .values({
+        schoolId: school.id,
+        question: parsed.data.question,
+        answer: parsed.data.answer,
+        sortOrder: count,
+      })
+      .returning({ id: faqs.id });
     revalidatePath(SETTINGS_PATH);
-    return successState("Question added. Your agent can use this answer now.");
+    return successState("Question added. Your agent can use this answer now.", {
+      id: created?.id ?? "",
+    });
+  });
+}
+
+/**
+ * Edit an existing FAQ in place. Bypasses the 20-question cap (creating a new
+ * row enforces it; correcting one does not), preserves the row id so any
+ * existing sort order, snapshots, or references stay stable, and reports a
+ * stale-edit conflict using the same `updatedAt` strategy as offering edits.
+ */
+export async function updateFaqAction(
+  _prev: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  return run(async () => {
+    const { school } = await requireOwnedSchool();
+    const parsed = updateFaqSchema.safeParse(
+      formValues(formData, ["id", "expectedUpdatedAt", "question", "answer"]),
+    );
+    if (!parsed.success) {
+      return errorState(
+        "Check the highlighted fields and save the question again.",
+        fieldErrorsFrom(parsed.error),
+      );
+    }
+    const { id, expectedUpdatedAt, ...values } = parsed.data;
+    const db = getDb();
+    const [existing] = await db
+      .select()
+      .from(faqs)
+      .where(and(eq(faqs.id, id), eq(faqs.schoolId, school.id)))
+      .limit(1);
+    if (!existing) {
+      return errorState("That question no longer exists. Refresh the page.");
+    }
+    if (!rowUpdated(existing.updatedAt, expectedUpdatedAt)) {
+      return conflictState(STALE_EDIT_MESSAGE, {
+        id,
+        expectedUpdatedAt: updatedAtIso(existing.updatedAt),
+        question: existing.question,
+        answer: existing.answer,
+      });
+    }
+    const updated = await db
+      .update(faqs)
+      .set({
+        question: values.question,
+        answer: values.answer,
+        sortOrder: existing.sortOrder,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(faqs.id, id), eq(faqs.schoolId, school.id)))
+      .returning({ updatedAt: faqs.updatedAt });
+    revalidatePath(SETTINGS_PATH);
+    return successState("Question saved. Your agent will use this answer.", {
+      id,
+      expectedUpdatedAt: updated[0]
+        ? updatedAtIso(updated[0].updatedAt)
+        : updatedAtIso(expectedUpdatedAt),
+      question: values.question,
+      answer: values.answer,
+    });
   });
 }
 

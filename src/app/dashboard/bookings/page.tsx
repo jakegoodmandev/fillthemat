@@ -34,16 +34,33 @@ const FILTERS = [
   { id: "all", label: "All", href: "/dashboard/bookings?filter=all" },
 ] as const;
 
+type BookingStatus = "booked" | "showed" | "no_show" | "cancelled";
+const VALID_BOOKING_STATUSES: readonly BookingStatus[] = [
+  "booked",
+  "showed",
+  "no_show",
+  "cancelled",
+];
+
+function isBookingStatus(value: string): value is BookingStatus {
+  return (VALID_BOOKING_STATUSES as readonly string[]).includes(value);
+}
+
+function filterBaseHref(filter: string): string {
+  return `/dashboard/bookings?filter=${filter}`;
+}
+
 export default async function BookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; status?: string }>;
 }) {
   const { school } = await requireOwnedSchool();
-  const { filter = "upcoming" } = await searchParams;
+  const { filter = "upcoming", status } = await searchParams;
   const activeFilter = FILTERS.some((item) => item.id === filter)
     ? filter
     : "upcoming";
+  const statusFilter = status && isBookingStatus(status) ? status : null;
   const db = getDb();
   const now = new Date();
   const rows = await db
@@ -57,6 +74,7 @@ export default async function BookingsPage({
           : activeFilter === "past"
             ? lt(bookings.startAt, now)
             : undefined,
+        statusFilter ? eq(bookings.status, statusFilter) : undefined,
       ),
     )
     .orderBy(desc(bookings.startAt));
@@ -82,13 +100,16 @@ export default async function BookingsPage({
   return (
     <main id="main-content" className="flex flex-col gap-4">
       <PageHeader title="Bookings" />
-      <nav aria-label="Booking filters" className="flex gap-1">
+      <nav aria-label="Booking filters" className="flex flex-wrap gap-1">
         {FILTERS.map((item) => {
           const current = item.id === activeFilter;
+          const href = statusFilter
+            ? `${item.href}&status=${encodeURIComponent(statusFilter)}`
+            : item.href;
           return (
             <Link
               key={item.id}
-              href={item.href}
+              href={href}
               aria-current={current ? "page" : undefined}
               className={cn(
                 "rounded-full px-3 py-1.5 text-sm",
@@ -101,6 +122,24 @@ export default async function BookingsPage({
             </Link>
           );
         })}
+        {statusFilter ? (
+          <Link
+            href={filterBaseHref(
+              activeFilter === "past"
+                ? "past"
+                : activeFilter === "all"
+                  ? "all"
+                  : "upcoming",
+            )}
+            aria-label={`Remove ${formatBookingStatus(statusFilter)} filter`}
+            className="ml-1 inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1.5 text-sm text-foreground"
+          >
+            <span className="tabular-nums">
+              {formatBookingStatus(statusFilter)} only
+            </span>
+            <span aria-hidden="true">×</span>
+          </Link>
+        ) : null}
       </nav>
 
       {rows.length === 0 ? (

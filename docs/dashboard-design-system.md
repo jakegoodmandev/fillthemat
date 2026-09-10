@@ -115,3 +115,53 @@ One page heading. No default subtitle. Navigation items are label-only.
 Helpers stay only when they add a fact the label does not already convey
 (locks, floors, internal-only email, timezone). Owner-facing language uses
 “trial classes” and “class times”, not “offerings” or “windows”.
+
+## Overview
+
+`/dashboard` is the first surface a school owner sees after signing in. It is
+a server component that reads the school’s credentials, runs the per-metric
+SQL queries in parallel, and hands the page a tightly-shaped `metrics` object
+rather than raw rows.
+
+### Layout
+
+Top: compact public-page status (badge, view/preview links when published;
+publish flow when not).
+
+Middle: a single grouped summary surface divided into three equal cells
+(Upcoming bookings, Leads, Booking conversion). Each cell has the same
+anatomy — label, value (28–32px semibold, tabular numerals), scope/evidence
+sentence, optional drill-down as a real text `<a>`. Desktop dividers
+between cells; stacked cells on mobile.
+
+Below that: `Booking activity and definitions` and `System status`,
+both as native disclosure summaries so the surface is calm on first load.
+
+### Metric definitions
+
+| Display | Definition |
+| --- | --- |
+| Upcoming bookings | `count(*) from bookings where school = ? and status = 'booked' and startAt >= NOW()`. Label says “Scheduled from now”; we do not invent “this week”. |
+| Leads | `count(*) from leads where school = ?` over all time. Linked to `/dashboard/leads`. |
+| Booking conversion | Distinct eligible public-page sessions with at least one booking, divided by the eligible-session count for the same school, all time. A session is counted at most once in the numerator; a later cancellation does not undo a booking. |
+| Eligible sessions | `landingSessions` with `qualifiedAt IS NOT NULL`. The tracking excludes preview / known-bot sessions on an approved, published school but does not eliminate every bot; this number is not a booking-ready prospect count. |
+| Converted sessions | `count(distinct bookings.landingSessionId)` joined back to `landingSessions` for the same school with `qualifiedAt IS NOT NULL`. We do not divide an unrelated session population by the eligible-session denominator. |
+| Chat-assisted bookings | Booking-confirmation funnel events with `source = chat`. Recorded events; labelled as such. Not interchangeable with converted sessions. |
+| Active trial classes / class times | Configuration counts from `trialOfferings` / `trialWindows`. Each links to the corresponding settings category. |
+
+Empty and broken states:
+
+- Zero denominator → `—` with “No eligible sessions yet”.
+- Eligible, zero converted → `0%` with `0 of N eligible sessions`.
+- We never clamp a broken calculation to 100%.
+- A failed query surfaces an error boundary rather than silently substituting zeros.
+
+### Drill-downs
+
+- Upcoming bookings links to `/dashboard/bookings?filter=upcoming&status=booked`.
+- Leads links to `/dashboard/leads`.
+- Active class times links to `/dashboard/settings?section=schedule`.
+
+The `status=booked` filter is accepted by `/dashboard/bookings`, persisted as
+a removable chip, and verified not to change the meaning of the
+`Upcoming`/`Past`/`All` defaults.

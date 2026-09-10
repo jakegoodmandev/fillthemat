@@ -101,7 +101,9 @@ async function SectionContent({
           maximumAge: offering.maximumAge,
           attire: offering.attire,
           expectations: offering.expectations,
+          waiverNotes: offering.waiverNotes,
           active: offering.active,
+          updatedAt: offering.updatedAt.toISOString(),
           windowCount: windows.filter(
             (window) => window.trialOfferingId === offering.id,
           ).length,
@@ -156,6 +158,8 @@ async function SectionContent({
           id: faq.id,
           question: faq.question,
           answer: faq.answer,
+          sortOrder: faq.sortOrder,
+          updatedAt: faq.updatedAt.toISOString(),
         }))}
       />
     );
