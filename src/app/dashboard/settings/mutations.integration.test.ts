@@ -234,6 +234,7 @@ describe("setOfferingActive", () => {
     const again = await setOfferingActive(db, schoolA, offeringA, false);
     expect(again.status).toBe("success");
     expect(again.message).toMatch(/already not offered/);
+    expect(again.values?.unchanged).toBe("true");
 
     const on = await setOfferingActive(db, schoolA, offeringA, true);
     expect(on.status).toBe("success");

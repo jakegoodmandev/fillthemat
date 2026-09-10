@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -121,4 +121,22 @@ export function DiscardEditsDialog({
       </AlertDialogContent>
     </AlertDialog>
   );
+}
+
+const ANNOUNCEMENT_MS = 8000;
+
+/** Success copy lives outside the editor so it survives close, then clears. */
+export function useTimedAnnouncement() {
+  const [announcement, setAnnouncement] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!announcement) return;
+    const timer = window.setTimeout(
+      () => setAnnouncement(null),
+      ANNOUNCEMENT_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [announcement]);
+
+  return [announcement, setAnnouncement] as const;
 }

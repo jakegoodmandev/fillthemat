@@ -6,7 +6,11 @@ import { createFaqAction, deleteFaqAction, updateFaqAction } from "../actions";
 import type { SettingsFormState } from "../form-state";
 import { LIMITS } from "../schemas";
 import { Callout, EmptyState, FieldGroup } from "../ui/controls";
-import { DiscardEditsDialog, useRecordEditor } from "../ui/editor-lifecycle";
+import {
+  DiscardEditsDialog,
+  useRecordEditor,
+  useTimedAnnouncement,
+} from "../ui/editor-lifecycle";
 import { FaqFields } from "../ui/faq-fields";
 import {
   ItemActionForm,
@@ -31,7 +35,7 @@ const STARTER_QUESTIONS = [
 
 export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
   const editor = useRecordEditor("faqs");
-  const [announcement, setAnnouncement] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useTimedAnnouncement();
   const [focusId, setFocusId] = useState<string | null>(null);
   const addRef = useRef<HTMLDivElement>(null);
   const [createQuestion, setCreateQuestion] = useState("");

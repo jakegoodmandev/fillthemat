@@ -202,6 +202,7 @@ export async function setOfferingActive(
     existing.active
       ? `“${existing.name}” is already offered to families.`
       : `“${existing.name}” is already not offered.`,
+    { unchanged: "true" },
   );
 }
 

@@ -336,7 +336,9 @@ export async function toggleOfferingAction(
       parsed.data.id,
       parsed.data.active,
     );
-    if (result.status === "success") revalidateOwnerViews(school.slug);
+    if (result.status === "success" && result.values?.unchanged !== "true") {
+      revalidateOwnerViews(school.slug);
+    }
     return result;
   });
 }

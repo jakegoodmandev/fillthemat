@@ -13,7 +13,11 @@ import { nullToEmpty } from "../form-utils";
 import { formatAgeRange, formatCount } from "../format";
 import { sectionHref } from "../sections";
 import { Badge, Callout, EmptyState, FieldGroup } from "../ui/controls";
-import { DiscardEditsDialog, useRecordEditor } from "../ui/editor-lifecycle";
+import {
+  DiscardEditsDialog,
+  useRecordEditor,
+  useTimedAnnouncement,
+} from "../ui/editor-lifecycle";
 import { OfferingFields } from "../ui/offering-fields";
 import {
   ItemActionForm,
@@ -59,7 +63,7 @@ function offeringValues(offering: OfferingItem) {
 
 export function OfferingsSection({ offerings }: { offerings: OfferingItem[] }) {
   const editor = useRecordEditor("offerings");
-  const [announcement, setAnnouncement] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useTimedAnnouncement();
   const [focusId, setFocusId] = useState<string | null>(null);
   const nameRef = useRef<HTMLDivElement>(null);
   const activeCount = offerings.filter((offering) => offering.active).length;
@@ -263,15 +267,9 @@ function OfferingRow({
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              {formatCount(offering.windowCount, "class time")} on the schedule,
-              not offered to families.
-            </p>
-          )}
-          {!offering.active && offering.activeWindowCount > 0 ? (
-            <p className="text-xs text-warning">
               Turned off, so its class times are not offered.
             </p>
-          ) : null}
+          )}
         </div>
         <div className="flex flex-wrap items-start gap-2 sm:justify-end">
           <Button
