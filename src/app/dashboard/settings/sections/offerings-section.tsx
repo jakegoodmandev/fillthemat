@@ -354,12 +354,8 @@ function CreateOfferingForm({
     dirtyKey: "offerings:new",
     clearOnSuccess: true,
     onSuccess,
+    onPendingChange,
   });
-
-  useEffect(() => {
-    onPendingChange(pending);
-    return () => onPendingChange(false);
-  }, [pending, onPendingChange]);
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-5">
@@ -412,12 +408,8 @@ function EditOfferingForm({
     initialValues: offeringValues(offering),
     dirtyKey: `offerings:edit:${offering.id}`,
     onSuccess,
+    onPendingChange,
   });
-
-  useEffect(() => {
-    onPendingChange(pending);
-    return () => onPendingChange(false);
-  }, [pending, onPendingChange]);
 
   return (
     <form

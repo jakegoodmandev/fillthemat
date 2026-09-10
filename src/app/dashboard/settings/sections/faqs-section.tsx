@@ -296,12 +296,8 @@ function CreateFaqForm({
     dirtyKey: "faqs:new",
     clearOnSuccess: true,
     onSuccess,
+    onPendingChange,
   });
-
-  useEffect(() => {
-    onPendingChange(pending);
-    return () => onPendingChange(false);
-  }, [pending, onPendingChange]);
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-5">
@@ -358,12 +354,8 @@ function EditFaqForm({
     },
     dirtyKey: `faqs:edit:${faq.id}`,
     onSuccess,
+    onPendingChange,
   });
-
-  useEffect(() => {
-    onPendingChange(pending);
-    return () => onPendingChange(false);
-  }, [pending, onPendingChange]);
 
   return (
     <form

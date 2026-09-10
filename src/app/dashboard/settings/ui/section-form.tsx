@@ -48,12 +48,14 @@ export function useSettingsForm({
   dirtyKey,
   clearOnSuccess = false,
   onSuccess,
+  onPendingChange,
 }: {
   action: SettingsAction;
   initialValues: Values;
   dirtyKey: string;
   clearOnSuccess?: boolean;
   onSuccess?: (state: SettingsFormState, meta: SaveSuccessMeta) => void;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const [state, dispatch, pending] = useActionState(action, IDLE_STATE);
   const [values, setValues] = useState<Values>(initialValues);
@@ -66,9 +68,13 @@ export function useSettingsForm({
   const handledState = useRef<SettingsFormState | null>(null);
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
+  const onPendingChangeRef = useRef(onPendingChange);
+  onPendingChangeRef.current = onPendingChange;
 
   const formAction = useCallback(
     (formData: FormData) => {
+      // Mark saving before dispatch so a following click cannot unmount us.
+      onPendingChangeRef.current?.(true);
       setEditedFields([]);
       editedSinceSubmit.current = [];
       const submitted: Values = {};
@@ -81,6 +87,14 @@ export function useSettingsForm({
     },
     [dispatch],
   );
+
+  useEffect(() => {
+    if (!pending) onPendingChangeRef.current?.(false);
+  }, [pending]);
+
+  useEffect(() => {
+    return () => onPendingChangeRef.current?.(false);
+  }, []);
 
   useEffect(() => {
     if (state.status === "idle") return;

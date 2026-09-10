@@ -62,9 +62,9 @@ from a `"use server"` module made it a callable endpoint that accepted any
   Delete Question stay secondary and distinct.
 - One open create/edit panel per category. Switching records or opening Add
   while dirty asks Keep Editing / Discard Changes. A clean panel switches
-  immediately. While a save is pending the switch is blocked (no discard
-  dialog, no unmount) so the in-flight action can still report success or
-  failure — discarding does not abort a server action.
+  immediately. Submit marks the editor saving synchronously, so a following
+  click cannot unmount it. While saving, switch/Add/Cancel are blocked (no
+  discard dialog) because server actions are not abortable from the client.
 - Opening Edit loads every supported saved field from the record DTO, including
   values omitted or truncated in the summary.
 - Editors have a contextual heading, a primary save action, and Cancel. Cancel
