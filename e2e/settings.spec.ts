@@ -245,3 +245,134 @@ test("a class time can be added, then deleted after confirming", async ({
     page.getByRole("listitem").filter({ hasText: "Playwright temp window" }),
   ).toHaveCount(0);
 });
+
+test("editing a trial class loads full values, saves, persists, and reloads", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/settings?section=offerings");
+  const row = page
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("button", { name: "Edit", exact: true }) })
+    .first();
+  await row.getByRole("button", { name: "Edit" }).click();
+
+  const name = page.getByLabel("Class name");
+  const youngest = page.getByLabel("Youngest age");
+  const oldest = page.getByLabel("Oldest age");
+  const originalName = await name.inputValue();
+  const originalYoungest = await youngest.inputValue();
+  const originalOldest = await oldest.inputValue();
+
+  const newName = `Edited trial ${Date.now()}`;
+  await name.fill(newName);
+  await youngest.fill("6");
+  await oldest.fill("12");
+  await page.getByRole("button", { name: "Save Changes" }).click();
+
+  await expect(
+    page.getByRole("status").filter({ hasText: "saved. New bookings" }),
+  ).toBeVisible();
+  // The editor closes, restoring the "Add a Trial Class" action.
+  await expect(page.getByRole("button", { name: "Save Changes" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("button", { name: "Add a Trial Class" }),
+  ).toBeVisible();
+
+  await page.reload();
+  const newRow = page.getByRole("listitem").filter({ hasText: newName });
+  await expect(newRow).toBeVisible();
+
+  await newRow.getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByLabel("Class name")).toHaveValue(newName);
+  await expect(page.getByLabel("Youngest age")).toHaveValue("6");
+  await expect(page.getByLabel("Oldest age")).toHaveValue("12");
+
+  // Restore the shared row for the next run.
+  await page.getByLabel("Class name").fill(originalName);
+  await page.getByLabel("Youngest age").fill(originalYoungest);
+  await page.getByLabel("Oldest age").fill(originalOldest);
+  await page.getByRole("button", { name: "Save Changes" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "saved. New bookings" }),
+  ).toBeVisible();
+});
+
+test("editing a question in place keeps the count and cancel discards without writing", async ({
+  page,
+}) => {
+  const question = `Can parents watch? ${Date.now()}`;
+  await page.goto("/dashboard/settings?section=faqs");
+
+  const questionField = page.getByLabel(/^Question/);
+  if (!(await questionField.isVisible())) {
+    await page.getByRole("button", { name: "Add a Question" }).click();
+  }
+  await questionField.fill(question);
+  await page.getByLabel(/^Answer/).fill("Original answer");
+  await page.getByRole("button", { name: "Add Question" }).click();
+
+  const row = page.getByRole("listitem").filter({ hasText: question });
+  await expect(row).toBeVisible();
+  const counter = page.getByText(/ of 20 used$/);
+  await expect(counter).toBeVisible();
+  const before = await counter.textContent();
+
+  await row.getByRole("button", { name: "Edit" }).click();
+  const answer = page.getByLabel(/^Answer/);
+  await expect(answer).toHaveValue("Original answer");
+  await answer.fill("Updated answer");
+
+  // Cancelling while dirty asks before throwing the edits away.
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  const discard = page.getByRole("alertdialog", {
+    name: "Discard these changes?",
+  });
+  await expect(discard).toBeVisible();
+  await discard.getByRole("button", { name: "Keep Editing" }).click();
+  await expect(answer).toHaveValue("Updated answer");
+
+  await page.getByRole("button", { name: "Save Changes" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Question saved" }),
+  ).toBeVisible();
+
+  // Same number of questions and the updated answer is persisted.
+  await expect(counter).toHaveText(before ?? "");
+  await row.locator("summary").click();
+  await expect(row.getByText("Updated answer")).toBeVisible();
+
+  // Clean up the synthetic question.
+  await row.getByRole("button", { name: "Delete" }).click();
+  const confirm = page.getByRole("alertdialog", {
+    name: "Delete this question?",
+  });
+  await confirm.getByRole("button", { name: "Delete Question" }).click();
+  await expect(
+    page.getByRole("listitem").filter({ hasText: question }),
+  ).toHaveCount(0);
+});
+
+test("app links that leave settings ask before discarding unsaved edits", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/settings?section=pricing");
+  await page
+    .getByLabel(/Prices and conditions/)
+    .fill("Unsaved pricing notes for the leave guard.");
+
+  const overview = page
+    .getByRole("navigation", { name: "Dashboard" })
+    .getByRole("link", { name: "Overview" });
+
+  await overview.click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Keep Editing" }).click();
+  await expect(page.locator("#section-title")).toHaveText("Pricing");
+
+  await overview.click();
+  await dialog.getByRole("button", { name: "Discard Changes" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+});

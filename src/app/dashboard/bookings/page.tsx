@@ -37,13 +37,16 @@ const FILTERS = [
 export default async function BookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; status?: string }>;
 }) {
   const { school } = await requireOwnedSchool();
-  const { filter = "upcoming" } = await searchParams;
+  const { filter = "upcoming", status } = await searchParams;
   const activeFilter = FILTERS.some((item) => item.id === filter)
     ? filter
     : "upcoming";
+  // Only the overview's "Upcoming bookings" link uses status=booked; anything
+  // else keeps the existing all-status behavior.
+  const bookedOnly = status === "booked";
   const db = getDb();
   const now = new Date();
   const rows = await db
@@ -57,6 +60,7 @@ export default async function BookingsPage({
           : activeFilter === "past"
             ? lt(bookings.startAt, now)
             : undefined,
+        bookedOnly ? eq(bookings.status, "booked") : undefined,
       ),
     )
     .orderBy(desc(bookings.startAt));
@@ -79,16 +83,22 @@ export default async function BookingsPage({
         ? "No past bookings."
         : "No bookings yet.";
 
+  const filterHref = (id: string) =>
+    `/dashboard/bookings?filter=${id}${bookedOnly ? "&status=booked" : ""}`;
+
   return (
     <main id="main-content" className="flex flex-col gap-4">
       <PageHeader title="Bookings" />
-      <nav aria-label="Booking filters" className="flex gap-1">
+      <nav
+        aria-label="Booking filters"
+        className="flex flex-wrap items-center gap-1"
+      >
         {FILTERS.map((item) => {
           const current = item.id === activeFilter;
           return (
             <Link
               key={item.id}
-              href={item.href}
+              href={filterHref(item.id)}
               aria-current={current ? "page" : undefined}
               className={cn(
                 "rounded-full px-3 py-1.5 text-sm",
@@ -101,6 +111,16 @@ export default async function BookingsPage({
             </Link>
           );
         })}
+        {bookedOnly ? (
+          <Link
+            href={`/dashboard/bookings?filter=${activeFilter}`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          >
+            Booked only
+            <span aria-hidden="true">×</span>
+            <span className="sr-only">Remove filtered view</span>
+          </Link>
+        ) : null}
       </nav>
 
       {rows.length === 0 ? (

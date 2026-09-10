@@ -245,6 +245,32 @@ export const capacitySchema = z.object({
 
 export const idSchema = z.object({ id: z.uuid("That item no longer exists.") });
 
+/** Edit forms send the row's `updatedAt` so saves fail instead of overwriting a newer write. */
+export function idWithUpdatedAtSchema() {
+  return z.object({
+    id: z.uuid("That item no longer exists."),
+    updatedAt: z
+      .string()
+      .trim()
+      .min(1, "Reload the page and try again.")
+      .refine((value) => !Number.isNaN(Date.parse(value)), {
+        message: "Reload the page and try again.",
+      }),
+  });
+}
+
+/** Explicit desired state for offering on/off, instead of inverting the server row. */
+export const offeringActiveSchema = z.object({
+  id: z.uuid("That trial class no longer exists."),
+  active: z
+    .string()
+    .trim()
+    .refine((value) => value === "true" || value === "false", {
+      message: "Choose whether this trial class is offered.",
+    })
+    .transform((value) => value === "true"),
+});
+
 export const faqSchema = z.object({
   question: required(
     LIMITS.faqQuestion,
@@ -257,6 +283,18 @@ export const faqSchema = z.object({
     `Keep the answer under ${LIMITS.faqAnswer.toLocaleString("en-US")} characters.`,
   ),
 });
+
+export function offeredFieldNames(): readonly string[] {
+  return [
+    "name",
+    "description",
+    "minimumAge",
+    "maximumAge",
+    "attire",
+    "expectations",
+    "waiverNotes",
+  ] as const;
+}
 
 /** FormData -> plain object of trimmed strings, safe to hand to zod. */
 export function formValues(

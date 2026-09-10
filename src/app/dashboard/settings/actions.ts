@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { requireOwnedSchool } from "@/lib/auth/current-school";
 import {
+  conflictState,
   errorState,
   GENERIC_SERVER_ERROR,
   type SettingsFormState,
@@ -27,15 +28,35 @@ import {
   fieldErrorsFrom,
   formValues,
   idSchema,
+  idWithUpdatedAtSchema,
   LIMITS,
+  offeringActiveSchema,
   offeringSchema,
   pricingSchema,
   profileSchema,
   publicAddressSchema,
   windowSchema,
 } from "./schemas";
+import { applyFaqUpdate, applyOfferingUpdate } from "./updates";
 
 const SETTINGS_PATH = "/dashboard/settings";
+
+/** Fields the Trial Classes editor exposes. `waiverNotes` is deliberately absent. */
+const OFFERING_EDIT_FIELDS = [
+  "name",
+  "description",
+  "minimumAge",
+  "maximumAge",
+  "attire",
+  "expectations",
+] as const;
+
+/** Revalidate every view a mutation can affect, not just the settings route. */
+function revalidateAffected(slug: string) {
+  revalidatePath(SETTINGS_PATH);
+  revalidatePath("/dashboard");
+  revalidatePath(`/s/${slug}`);
+}
 
 function nullToEmpty(value: string | null | undefined): string {
   return value ?? "";
@@ -258,19 +279,32 @@ export async function createOfferingAction(
       );
     }
     const db = getDb();
-    await db.insert(trialOfferings).values({
-      schoolId: school.id,
+    const [created] = await db
+      .insert(trialOfferings)
+      .values({
+        schoolId: school.id,
+        name: parsed.data.name,
+        description: parsed.data.description,
+        minimumAge: parsed.data.minimumAge,
+        maximumAge: parsed.data.maximumAge,
+        expectations: parsed.data.expectations,
+        attire: parsed.data.attire,
+        waiverNotes: parsed.data.waiverNotes,
+        active: true,
+      })
+      .returning({ id: trialOfferings.id });
+    revalidateAffected(school.slug);
+    return successState(`“${parsed.data.name}” added and open for bookings.`, {
+      id: created?.id ?? "",
       name: parsed.data.name,
-      description: parsed.data.description,
-      minimumAge: parsed.data.minimumAge,
-      maximumAge: parsed.data.maximumAge,
-      expectations: parsed.data.expectations,
-      attire: parsed.data.attire,
-      waiverNotes: parsed.data.waiverNotes,
-      active: true,
+      description: nullToEmpty(parsed.data.description),
+      minimumAge:
+        parsed.data.minimumAge == null ? "" : String(parsed.data.minimumAge),
+      maximumAge:
+        parsed.data.maximumAge == null ? "" : String(parsed.data.maximumAge),
+      attire: nullToEmpty(parsed.data.attire),
+      expectations: nullToEmpty(parsed.data.expectations),
     });
-    revalidatePath(SETTINGS_PATH);
-    return successState(`“${parsed.data.name}” added and open for bookings.`);
   });
 }
 
@@ -280,13 +314,15 @@ export async function toggleOfferingAction(
 ): Promise<SettingsFormState> {
   return run(async () => {
     const { school } = await requireOwnedSchool();
-    const parsed = idSchema.safeParse(formValues(formData, ["id"]));
+    const parsed = offeringActiveSchema.safeParse(
+      formValues(formData, ["id", "active"]),
+    );
     if (!parsed.success) {
       return errorState("That trial class no longer exists. Refresh the page.");
     }
     const db = getDb();
     const [offering] = await db
-      .select()
+      .select({ id: trialOfferings.id, name: trialOfferings.name })
       .from(trialOfferings)
       .where(
         and(
@@ -298,21 +334,80 @@ export async function toggleOfferingAction(
     if (!offering) {
       return errorState("That trial class no longer exists. Refresh the page.");
     }
-    const nextActive = !offering.active;
     await db
       .update(trialOfferings)
-      .set({ active: nextActive, updatedAt: new Date() })
+      .set({ active: parsed.data.active, updatedAt: new Date() })
       .where(
         and(
           eq(trialOfferings.id, offering.id),
           eq(trialOfferings.schoolId, school.id),
         ),
       );
-    revalidatePath(SETTINGS_PATH);
+    revalidateAffected(school.slug);
     return successState(
-      nextActive
+      parsed.data.active
         ? `“${offering.name}” is open for bookings again.`
         : `“${offering.name}” is no longer offered to families.`,
+    );
+  });
+}
+
+export async function updateOfferingAction(
+  _prev: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  return run(async () => {
+    const { school } = await requireOwnedSchool();
+    const meta = idWithUpdatedAtSchema().safeParse(
+      formValues(formData, ["id", "updatedAt"]),
+    );
+    // `waiverNotes` has no field in the editor, but `offeringSchema` parses a
+    // plain object and rejects a missing key; pass it (empty -> null) so the
+    // schema stays the single source of truth. The update below never writes it.
+    const fields = offeringSchema.safeParse(
+      formValues(formData, [...OFFERING_EDIT_FIELDS, "waiverNotes"]),
+    );
+    if (!meta.success || !fields.success) {
+      return errorState("Check the highlighted fields and save again.", {
+        ...(meta.success ? {} : fieldErrorsFrom(meta.error)),
+        ...(fields.success ? {} : fieldErrorsFrom(fields.error)),
+      });
+    }
+    const db = getDb();
+    const values = fields.data;
+    const result = await applyOfferingUpdate(db, {
+      schoolId: school.id,
+      id: meta.data.id,
+      token: new Date(meta.data.updatedAt),
+      values: {
+        name: values.name,
+        description: values.description,
+        minimumAge: values.minimumAge,
+        maximumAge: values.maximumAge,
+        attire: values.attire,
+        expectations: values.expectations,
+      },
+    });
+
+    if (result.ok === false && result.reason === "missing") {
+      return errorState("That trial class no longer exists. Refresh the page.");
+    }
+    if (result.ok === false && result.reason === "conflict") {
+      return conflictState(
+        "Someone changed this trial class after you opened it. Keep your edits or reload the latest version.",
+      );
+    }
+    revalidateAffected(school.slug);
+    return successState(
+      `“${values.name}” saved. New bookings use these details.`,
+      {
+        name: values.name,
+        description: nullToEmpty(values.description),
+        minimumAge: values.minimumAge == null ? "" : String(values.minimumAge),
+        maximumAge: values.maximumAge == null ? "" : String(values.maximumAge),
+        attire: nullToEmpty(values.attire),
+        expectations: nullToEmpty(values.expectations),
+      },
     );
   });
 }
@@ -533,14 +628,63 @@ export async function createFaqAction(
         `You already have ${LIMITS.faqCount} questions. Delete one before adding another.`,
       );
     }
-    await db.insert(faqs).values({
-      schoolId: school.id,
-      question: parsed.data.question,
-      answer: parsed.data.answer,
-      sortOrder: count,
+    const [created] = await db
+      .insert(faqs)
+      .values({
+        schoolId: school.id,
+        question: parsed.data.question,
+        answer: parsed.data.answer,
+        sortOrder: count,
+      })
+      .returning({ id: faqs.id, question: faqs.question, answer: faqs.answer });
+    revalidateAffected(school.slug);
+    return successState("Question added. Your agent can use this answer now.", {
+      id: created?.id ?? "",
+      question: created?.question ?? parsed.data.question,
+      answer: created?.answer ?? parsed.data.answer,
     });
-    revalidatePath(SETTINGS_PATH);
-    return successState("Question added. Your agent can use this answer now.");
+  });
+}
+
+export async function updateFaqAction(
+  _prev: SettingsFormState,
+  formData: FormData,
+): Promise<SettingsFormState> {
+  return run(async () => {
+    const { school } = await requireOwnedSchool();
+    const meta = idWithUpdatedAtSchema().safeParse(
+      formValues(formData, ["id", "updatedAt"]),
+    );
+    const fields = faqSchema.safeParse(
+      formValues(formData, ["question", "answer"]),
+    );
+    if (!meta.success || !fields.success) {
+      return errorState("Check the highlighted fields and save again.", {
+        ...(meta.success ? {} : fieldErrorsFrom(meta.error)),
+        ...(fields.success ? {} : fieldErrorsFrom(fields.error)),
+      });
+    }
+    const db = getDb();
+    const result = await applyFaqUpdate(db, {
+      schoolId: school.id,
+      id: meta.data.id,
+      token: new Date(meta.data.updatedAt),
+      values: { question: fields.data.question, answer: fields.data.answer },
+    });
+
+    if (result.ok === false && result.reason === "missing") {
+      return errorState("That question no longer exists. Refresh the page.");
+    }
+    if (result.ok === false && result.reason === "conflict") {
+      return conflictState(
+        "Someone changed this question after you opened it. Keep your edits or reload the latest version.",
+      );
+    }
+    revalidateAffected(school.slug);
+    return successState("Question saved. Your agent can use this answer now.", {
+      question: fields.data.question,
+      answer: fields.data.answer,
+    });
   });
 }
 

@@ -16,6 +16,12 @@ export type SettingsFormState = {
    * the save was in flight.
    */
   values: Record<string, string> | null;
+  /**
+   * Set when an optimistic-concurrency check failed: another writer changed
+   * the record after the editor loaded it. The editor should keep the owner's
+   * typed values and offer a reload instead of overwriting silently.
+   */
+  conflict?: boolean;
 };
 
 export const IDLE_STATE: SettingsFormState = {
@@ -42,6 +48,20 @@ export function errorState(
   fieldErrors: Record<string, string> = {},
 ): SettingsFormState {
   return { status: "error", message, fieldErrors, values: null };
+}
+
+/**
+ * An optimistic-concurrency failure is an error with a specific next step:
+ * keep what the owner typed, then reload the latest values from the server.
+ */
+export function conflictState(message: string): SettingsFormState {
+  return {
+    status: "error",
+    message,
+    fieldErrors: {},
+    values: null,
+    conflict: true,
+  };
 }
 
 export const GENERIC_SERVER_ERROR =

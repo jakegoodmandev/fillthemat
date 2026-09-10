@@ -102,6 +102,7 @@ async function SectionContent({
           attire: offering.attire,
           expectations: offering.expectations,
           active: offering.active,
+          updatedAt: offering.updatedAt.toISOString(),
           windowCount: windows.filter(
             (window) => window.trialOfferingId === offering.id,
           ).length,
@@ -156,6 +157,7 @@ async function SectionContent({
           id: faq.id,
           question: faq.question,
           answer: faq.answer,
+          updatedAt: faq.updatedAt.toISOString(),
         }))}
       />
     );

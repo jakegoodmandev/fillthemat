@@ -1,25 +1,20 @@
-import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { headers } from "next/headers";
+import Link from "next/link";
 import { formatOwnerDateTime } from "@/components/dashboard/format";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { getDb } from "@/db";
-import {
-  bookings,
-  cronRuns,
-  emailDeliveries,
-  funnelEvents,
-  landingSessions,
-  leads,
-  trialOfferings,
-  trialWindows,
-} from "@/db/schema";
 import { requireOwnedSchool } from "@/lib/auth/current-school";
-import { FUNNEL_EVENTS } from "@/lib/funnel";
 import { publicSchoolUrl } from "@/lib/site-url";
 import { markPreviewedAction, publishSchoolAction } from "./actions";
+import {
+  formatConversionRate,
+  formatConversionScope,
+} from "./overview/metrics";
+import { loadOverviewMetrics } from "./overview/queries";
+import { type SectionId, sectionHref } from "./settings/sections";
 
 export default async function DashboardPage({
   searchParams,
@@ -28,110 +23,17 @@ export default async function DashboardPage({
 }) {
   const { school } = await requireOwnedSchool();
   const params = await searchParams;
-  const db = getDb();
-  const now = new Date();
-
-  const [
-    qualified,
-    converted,
-    chatConverted,
-    leadCount,
-    upcoming,
-    offeringCount,
-    windowCount,
-    failedEmail,
-    lastRun,
-  ] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(landingSessions)
-      .where(
-        and(
-          eq(landingSessions.schoolId, school.id),
-          isNotNull(landingSessions.qualifiedAt),
-        ),
-      ),
-    db
-      .select({
-        count: sql<number>`count(distinct ${bookings.landingSessionId})::int`,
-      })
-      .from(bookings)
-      .where(
-        and(
-          eq(bookings.schoolId, school.id),
-          isNotNull(bookings.landingSessionId),
-        ),
-      ),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(funnelEvents)
-      .where(
-        and(
-          eq(funnelEvents.schoolId, school.id),
-          eq(funnelEvents.eventType, FUNNEL_EVENTS.bookingConfirmed),
-          sql`${funnelEvents.metadata} ->> 'source' = 'chat'`,
-        ),
-      ),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(leads)
-      .where(eq(leads.schoolId, school.id)),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(bookings)
-      .where(
-        and(
-          eq(bookings.schoolId, school.id),
-          eq(bookings.status, "booked"),
-          gte(bookings.startAt, now),
-        ),
-      ),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(trialOfferings)
-      .where(
-        and(
-          eq(trialOfferings.schoolId, school.id),
-          eq(trialOfferings.active, true),
-        ),
-      ),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(trialWindows)
-      .where(
-        and(
-          eq(trialWindows.schoolId, school.id),
-          eq(trialWindows.active, true),
-        ),
-      ),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(emailDeliveries)
-      .where(
-        and(
-          eq(emailDeliveries.schoolId, school.id),
-          eq(emailDeliveries.state, "failed"),
-        ),
-      ),
-    db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).limit(1),
-  ]);
-
-  const qualifiedCount = qualified[0]?.count ?? 0;
-  const convertedCount = converted[0]?.count ?? 0;
-  const conversionRate =
-    qualifiedCount === 0
-      ? 0
-      : Math.round((convertedCount / qualifiedCount) * 1000) / 10;
   const headerList = await headers();
-  const publicUrl = school.publishedAt
-    ? publicSchoolUrl(school.slug, headerList)
-    : null;
   const published = school.publishedAt != null;
-  const failedCount = failedEmail[0]?.count ?? 0;
-  const activeOfferings = offeringCount[0]?.count ?? 0;
-  const activeWindows = windowCount[0]?.count ?? 0;
+  const publicUrl = published ? publicSchoolUrl(school.slug, headerList) : null;
 
-  const blockers = unpublishedBlockers({
+  const metrics = await loadOverviewMetrics(
+    getDb(),
+    school.id,
+    new Date(),
+  ).catch(() => null);
+
+  const readiness = readinessItems({
     approved: school.approvedAt != null,
     previewed: school.previewedAt != null,
     hasName: Boolean(school.name),
@@ -139,8 +41,8 @@ export default async function DashboardPage({
     hasTimezone: Boolean(school.timezone),
     hasNotificationEmail: Boolean(school.notificationEmail),
     hasLocation: Boolean(school.city || school.address),
-    hasOffering: activeOfferings > 0,
-    hasWindow: activeWindows > 0,
+    hasOffering: metrics ? metrics.activeOfferings > 0 : null,
+    hasWindow: metrics ? metrics.activeWindows > 0 : null,
   });
 
   return (
@@ -158,7 +60,7 @@ export default async function DashboardPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h2 id="publication" className="text-base font-semibold">
-              Page
+              Public page
             </h2>
             <Badge variant={published ? "success" : "muted"}>
               {published ? "Published" : "Unpublished"}
@@ -168,6 +70,11 @@ export default async function DashboardPage({
             )}
           </div>
           <div className="flex flex-wrap gap-2">
+            {publicUrl ? (
+              <Button asChild variant="outline">
+                <a href={publicUrl}>View Page</a>
+              </Button>
+            ) : null}
             <form action={markPreviewedAction}>
               <Button
                 type="submit"
@@ -183,6 +90,7 @@ export default async function DashboardPage({
             )}
           </div>
         </div>
+
         {publicUrl ? (
           <p className="text-sm">
             <a
@@ -193,10 +101,22 @@ export default async function DashboardPage({
             </a>
           </p>
         ) : null}
-        {!published && blockers.length > 0 ? (
-          <ul className="list-disc pl-5 text-sm text-muted-foreground">
-            {blockers.map((item) => (
-              <li key={item}>{item}</li>
+
+        {!published && readiness.length > 0 ? (
+          <ul className="flex flex-col gap-1">
+            {readiness.map((item) => (
+              <li key={item.label} className="text-sm text-muted-foreground">
+                {item.href ? (
+                  <Link
+                    href={sectionHref(item.href)}
+                    className="underline underline-offset-4 hover:text-foreground"
+                  >
+                    {item.label}
+                  </Link>
+                ) : (
+                  item.label
+                )}
+              </li>
             ))}
           </ul>
         ) : null}
@@ -204,71 +124,259 @@ export default async function DashboardPage({
 
       <Separator />
 
+      {metrics ? (
+        <OverviewSummary
+          upcomingBookings={metrics.upcomingBookings}
+          leadCount={metrics.leadCount}
+          eligibleSessions={metrics.eligibleSessions}
+          convertedSessions={metrics.convertedSessions}
+          chatBookings={metrics.chatBookings}
+          activeOfferings={metrics.activeOfferings}
+          activeWindows={metrics.activeWindows}
+          failedEmailCount={metrics.failedEmailCount}
+          lastRunFinishedAt={metrics.lastRunFinishedAt}
+          timezone={school.timezone}
+        />
+      ) : (
+        <section
+          aria-label="Summary unavailable"
+          className="rounded-lg border border-border bg-card/40 p-4"
+        >
+          <p className="text-sm font-medium">Metrics unavailable right now.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            We could not read your booking activity. Nothing was changed.
+          </p>
+          <Button asChild variant="outline" size="sm" className="mt-3">
+            <Link href="/dashboard">Reload</Link>
+          </Button>
+        </section>
+      )}
+    </main>
+  );
+}
+
+function OverviewSummary({
+  upcomingBookings,
+  leadCount,
+  eligibleSessions,
+  convertedSessions,
+  chatBookings,
+  activeOfferings,
+  activeWindows,
+  failedEmailCount,
+  lastRunFinishedAt,
+  timezone,
+}: {
+  upcomingBookings: number;
+  leadCount: number;
+  eligibleSessions: number;
+  convertedSessions: number;
+  chatBookings: number;
+  activeOfferings: number;
+  activeWindows: number;
+  failedEmailCount: number;
+  lastRunFinishedAt: Date | null;
+  timezone: string;
+}) {
+  return (
+    <div className="flex flex-col gap-5">
       <section
-        aria-label="Summary"
-        className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+        aria-labelledby="summary-heading"
+        className="overflow-hidden rounded-lg border border-border bg-card/40"
       >
-        <SummaryStat
-          label="Upcoming bookings"
-          value={upcoming[0]?.count ?? 0}
-        />
-        <SummaryStat label="Leads" value={leadCount[0]?.count ?? 0} />
-        <SummaryStat
-          label="Conversion rate"
-          value={`${conversionRate}%`}
-          hint="of qualified sessions"
-        />
+        <h2 id="summary-heading" className="sr-only">
+          Summary
+        </h2>
+        <dl className="grid grid-cols-1 divide-y divide-border sm:grid-cols-3 sm:divide-y-0 sm:divide-x">
+          <SummaryCell
+            label="Upcoming bookings"
+            value={String(upcomingBookings)}
+            scope="Scheduled from now"
+            action={{
+              label: "View bookings",
+              href: "/dashboard/bookings?filter=upcoming&status=booked",
+            }}
+          />
+          <SummaryCell
+            label="Leads"
+            value={String(leadCount)}
+            scope="All time"
+            action={{ label: "View leads", href: "/dashboard/leads" }}
+          />
+          <SummaryCell
+            label="Booking conversion"
+            value={formatConversionRate(convertedSessions, eligibleSessions)}
+            scope={formatConversionScope(convertedSessions, eligibleSessions)}
+            subScope="All time"
+          />
+        </dl>
       </section>
 
-      <details className="text-sm">
-        <summary className="cursor-pointer text-sm font-medium">
-          More details
-        </summary>
-        <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
-          <Detail
-            label="Qualified sessions"
-            value={qualifiedCount}
-            hint="Sessions that reached a booking-ready state"
-          />
-          <Detail label="Converted sessions" value={convertedCount} />
-          <Detail
-            label="Chat-assisted bookings"
-            value={chatConverted[0]?.count ?? 0}
-          />
-          <Detail label="Active trial classes" value={activeOfferings} />
-          <Detail label="Active class times" value={activeWindows} />
-        </dl>
-      </details>
+      <section aria-labelledby="booking-activity">
+        <details className="text-sm">
+          <summary
+            id="booking-activity"
+            className="cursor-pointer text-sm font-medium"
+          >
+            Booking activity and definitions
+          </summary>
+          <dl className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+            <Definition
+              label="Eligible sessions"
+              value={String(eligibleSessions)}
+            >
+              Public-page sessions that reached a booking-ready state on an
+              approved, published page. Preview and known-bot sessions are
+              excluded, but some bots may still slip through; these are not
+              booking-ready prospects.
+            </Definition>
+            <Definition
+              label="Converted sessions"
+              value={String(convertedSessions)}
+            >
+              Eligible sessions with at least one booking. Each session counts
+              once, even with several bookings, and a later cancellation still
+              counts — a booking was made.
+            </Definition>
+            <Definition
+              label="Chat-assisted bookings"
+              value={String(chatBookings)}
+            >
+              Recorded booking-confirmation events with source “chat”. This is a
+              count of recorded events, not a deduplicated booking total.
+            </Definition>
+          </dl>
+        </details>
+      </section>
 
-      {failedCount > 0 ? (
-        <p role="status" className="text-sm text-warning">
-          {failedCount === 1
-            ? "1 email failed to send."
-            : `${failedCount} emails failed to send.`}
+      <section aria-labelledby="setup-heading" className="flex flex-col gap-2">
+        <h2 id="setup-heading" className="text-sm font-semibold">
+          Setup
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          <Link
+            href={sectionHref("offerings")}
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            {activeOfferings} active trial{" "}
+            {activeOfferings === 1 ? "class" : "classes"}
+          </Link>
+          {" · "}
+          <Link
+            href={sectionHref("schedule")}
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            {activeWindows} active class{" "}
+            {activeWindows === 1 ? "time" : "times"}
+          </Link>
         </p>
-      ) : null}
+      </section>
 
       <details className="text-sm text-muted-foreground">
-        <summary className="cursor-pointer text-sm font-medium text-foreground">
-          System status
+        <summary className="cursor-pointer text-sm font-medium">
+          <span className="text-foreground">System status</span>
+          {failedEmailCount > 0 ? (
+            <span className="ml-2 text-warning">
+              {failedEmailCount}{" "}
+              {failedEmailCount === 1 ? "email failure" : "email failures"}
+            </span>
+          ) : null}
         </summary>
         <dl className="mt-3 grid gap-2">
-          <Detail label="Email failures" value={failedCount} />
+          <Detail label="Email failures" value={failedEmailCount} />
           <Detail
             label="Last maintenance"
             value={
-              lastRun[0]?.finishedAt
-                ? formatOwnerDateTime(lastRun[0].finishedAt, school.timezone)
+              lastRunFinishedAt
+                ? formatOwnerDateTime(lastRunFinishedAt, timezone)
                 : "Never"
             }
           />
         </dl>
       </details>
-    </main>
+
+      {failedEmailCount > 0 ? (
+        <p role="status" className="text-sm text-warning">
+          {failedEmailCount === 1
+            ? "1 email failed to send."
+            : `${failedEmailCount} emails failed to send.`}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
-function unpublishedBlockers({
+function SummaryCell({
+  label,
+  value,
+  scope,
+  subScope,
+  action,
+}: {
+  label: string;
+  value: string;
+  scope: string;
+  subScope?: string;
+  action?: { label: string; href: string };
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 px-4 py-4">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-3xl font-semibold tabular-nums">{value}</dd>
+      <dd className="text-xs text-muted-foreground">
+        {scope}
+        {subScope ? ` · ${subScope}` : ""}
+      </dd>
+      {action ? (
+        <dd className="mt-1">
+          <Link
+            href={action.href}
+            className="text-sm font-medium underline underline-offset-4 hover:no-underline"
+          >
+            {action.label} →
+          </Link>
+        </dd>
+      ) : null}
+    </div>
+  );
+}
+
+function Definition({
+  label,
+  value,
+  children,
+}: {
+  label: string;
+  value: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">
+        {label}{" "}
+        <span className="ml-1 font-medium text-foreground tabular-nums">
+          {value}
+        </span>
+      </dt>
+      <dd className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+        {children}
+      </dd>
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex min-w-0 items-baseline gap-2">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
+type ReadinessItem = { label: string; href: SectionId | null };
+
+function readinessItems({
   approved,
   previewed,
   hasName,
@@ -286,58 +394,24 @@ function unpublishedBlockers({
   hasTimezone: boolean;
   hasNotificationEmail: boolean;
   hasLocation: boolean;
-  hasOffering: boolean;
-  hasWindow: boolean;
-}) {
-  const items: string[] = [];
-  if (!approved) items.push("Awaiting approval");
-  if (!previewed) items.push("Preview the public page");
-  if (!hasName) items.push("Add a school name");
-  if (!hasSlug) items.push("Add a public page address");
-  if (!hasTimezone) items.push("Choose a time zone");
-  if (!hasNotificationEmail) items.push("Add a notification email");
-  if (!hasLocation) items.push("Add a city or street address");
-  if (!hasOffering) items.push("Add an active trial class");
-  if (!hasWindow) items.push("Add an active class time");
+  hasOffering: boolean | null;
+  hasWindow: boolean | null;
+}): ReadinessItem[] {
+  const items: ReadinessItem[] = [];
+  if (!approved) items.push({ label: "Awaiting approval", href: null });
+  if (!previewed) items.push({ label: "Preview the public page", href: null });
+  if (!hasName) items.push({ label: "Add a school name", href: "profile" });
+  if (!hasSlug)
+    items.push({ label: "Add a public page address", href: "profile" });
+  if (!hasTimezone)
+    items.push({ label: "Choose a time zone", href: "profile" });
+  if (!hasNotificationEmail)
+    items.push({ label: "Add a notification email", href: "profile" });
+  if (!hasLocation)
+    items.push({ label: "Add a city or street address", href: "profile" });
+  if (hasOffering === false)
+    items.push({ label: "Add an active trial class", href: "offerings" });
+  if (hasWindow === false)
+    items.push({ label: "Add an active class time", href: "schedule" });
   return items;
-}
-
-function SummaryStat({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-}) {
-  return (
-    <div className="min-w-0">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-medium tabular-nums">{value}</p>
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
-  );
-}
-
-function Detail({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-}) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="tabular-nums">
-        {value}
-        {hint ? (
-          <span className="ml-1 text-xs text-muted-foreground">({hint})</span>
-        ) : null}
-      </dd>
-    </div>
-  );
 }

@@ -5,6 +5,8 @@ import {
   faqSchema,
   fieldErrorsFrom,
   formValues,
+  idWithUpdatedAtSchema,
+  offeringActiveSchema,
   offeringSchema,
   profileSchema,
   publicAddressSchema,
@@ -223,6 +225,49 @@ describe("formValues", () => {
       name: "Dojo",
       city: "",
     });
+  });
+});
+
+describe("idWithUpdatedAtSchema", () => {
+  it("accepts a valid id and ISO timestamp", () => {
+    const parsed = idWithUpdatedAtSchema().parse({
+      id: "00000000-0000-4000-8000-000000000000",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(parsed.id).toBeTruthy();
+  });
+
+  it("rejects a missing or invalid timestamp", () => {
+    expect(
+      idWithUpdatedAtSchema().safeParse({
+        id: "00000000-0000-4000-8000-000000000000",
+        updatedAt: "",
+      }).success,
+    ).toBe(false);
+    expect(
+      idWithUpdatedAtSchema().safeParse({
+        id: "00000000-0000-4000-8000-000000000000",
+        updatedAt: "not-a-date",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("offeringActiveSchema", () => {
+  const id = "00000000-0000-4000-8000-000000000000";
+  it("parses an explicit desired state", () => {
+    expect(offeringActiveSchema.parse({ id, active: "true" }).active).toBe(
+      true,
+    );
+    expect(offeringActiveSchema.parse({ id, active: "false" }).active).toBe(
+      false,
+    );
+  });
+
+  it("rejects anything but true/false", () => {
+    expect(offeringActiveSchema.safeParse({ id, active: "yes" }).success).toBe(
+      false,
+    );
   });
 });
 

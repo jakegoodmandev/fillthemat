@@ -240,6 +240,8 @@ export function ItemActionForm({
   variant = "secondary",
   confirm,
   className,
+  hiddenFields,
+  disabled = false,
 }: {
   action: SettingsAction;
   id: string;
@@ -248,6 +250,8 @@ export function ItemActionForm({
   variant?: "secondary" | "danger";
   confirm?: { title: string; body: React.ReactNode; confirmLabel: string };
   className?: string;
+  hiddenFields?: Record<string, string>;
+  disabled?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, IDLE_STATE);
   const formRef = useRef<HTMLFormElement>(null);
@@ -258,11 +262,16 @@ export function ItemActionForm({
     <div className={`flex min-w-0 flex-col gap-1 ${className ?? ""}`}>
       <form ref={formRef} action={formAction}>
         <input type="hidden" name="id" value={id} />
+        {hiddenFields
+          ? Object.entries(hiddenFields).map(([name, value]) => (
+              <input key={name} type="hidden" name={name} value={value} />
+            ))
+          : null}
         <Button
           type={confirm ? "button" : "submit"}
           variant={buttonVariant}
           size="sm"
-          disabled={pending}
+          disabled={disabled || pending}
           aria-busy={pending || undefined}
           onClick={confirm ? () => setOpen(true) : undefined}
         >

@@ -82,8 +82,14 @@ a confirmation.
 - Capacity cannot drop below the students already booked in an upcoming class;
   the minimum is on the input and the server repeats it if bypassed.
 - Turned-off class times cannot be reopened yet; the row says so.
-- Trial classes cannot be edited or deleted yet; the add form says so.
-- FAQs cannot be edited or reordered yet, and the 20-question limit is visible.
+- Trial classes can be edited in place (class name, youngest/oldest age,
+  description, what to wear, what to expect). They cannot be deleted. Editing
+  keeps the existing id, active state, `waiverNotes`, and class-time
+  associations, and changing the age range affects new bookings only —
+  existing reservations keep their snapshot.
+- FAQs can be edited in place (question and answer) while keeping their id and
+  sort position. Reordering is still unavailable, and the 20-question limit
+  applies to creating new questions only, not to correcting an existing one.
 
 ## Honest previews
 
@@ -97,8 +103,27 @@ can create a booking, lead, or notification.
 ## Deliberately out of scope (first pass)
 
 New categories, AI model controls, website ingestion, uploads, multi-channel
-settings, draft/publish for settings, schema migrations, offering/FAQ editing or
-reordering, reopening class times, and in-settings agent testing.
+settings, draft/publish for settings, schema migrations, FAQ reordering, class-
+time structural editing (the Release B schedule work), reopening class times,
+and in-settings agent testing.
+
+## Inline create/edit editors (trial classes and FAQs)
+
+Trial classes and FAQs now use a shared inline editor instead of one-shot create
+forms. One editor is open per category; switching rows or opening Add while dirty
+asks Keep Editing / Discard Changes, and Cancel asks before discarding a dirty
+editor. The editor loads every supported saved field (not the summary text),
+saves through the existing `SettingsFormState` contract, re-baselines to
+server-normalized values on success, and keeps any characters typed while the
+save was in flight as Unsaved changes. Successful Create reveals and focuses the
+new row; successful Edit closes and returns focus to the row's Edit button.
+
+Mutations preserve hidden data: the offering editor never writes `waiverNotes`,
+`active`, or class-time associations, and both editors use the row's `updatedAt`
+as an optimistic-concurrency token so a newer write returns a conflict (with
+Keep Editing / Reload) instead of being silently overwritten. Browser Back/
+Forward is not intercepted — only in-app link clicks and `beforeunload` are
+covered (see `settings-shell.tsx`).
 
 `createOfferingAction` already accepted `expectations` and `waiverNotes`; the
 form now exposes `expectations` (the booking agent reads it) and keeps accepting
@@ -106,11 +131,20 @@ form now exposes `expectations` (the booking agent reads it) and keeps accepting
 
 ## Tests
 
-- `bun run test` — `schemas.test.ts` (validation and normalization) and
-  `format.test.ts` (time/age/count formatting, section resolution and hrefs).
+- `bun run test` — `schemas.test.ts` (validation, normalization, and the edit
+  concurrency/active-state schemas), `format.test.ts` (time/age/count
+  formatting, section resolution and hrefs), and `overview/metrics.test.ts`
+  (conversion-rate math including the zero-denominator `—` case).
+- `bun run test:integration` — `overview/queries.integration.test.ts` (per-school
+  metric fixtures: duplicate bookings per session, cancelled and no-session
+  bookings, unqualified/preview sessions, and the upcoming drill-down
+  reconciliation) and `settings/updates.integration.test.ts` (edit keeps id,
+  `waiverNotes`, `active`, and class-time association; stale token conflicts;
+  FAQ edits at the 20-question limit keep id/sort/count).
 - `bun run test:e2e` — `e2e/settings.spec.ts` covers deep links, history,
   validation errors with preserved input, a successful save, server-normalized
-  values, the unsaved-changes guard, and add/delete with confirmation for both
-  FAQs and class times. `playwright.config.ts` now takes its base URL from
+  values, the unsaved-changes guard, add/delete with confirmation, and inline
+  editing of trial classes and FAQs (save → reload → edit again; cancel
+  discards without writing). `playwright.config.ts` takes its base URL from
   `.env.local` (`NEXT_PUBLIC_SITE_URL`), so it respects the worktree port
   contract.

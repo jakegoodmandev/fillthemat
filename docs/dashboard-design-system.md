@@ -109,6 +109,27 @@ Desktop rail ~208px (`md:w-52`). Mobile nav is a compact horizontal row.
 
 Navigation and URL-backed filters are real `<Link>`s with `aria-current="page"`.
 
+## Overview summary
+
+The dashboard overview groups its three headline metrics in one bordered
+`bg-card/40` surface (`dashboard/page.tsx`) with a `dl` grid: desktop columns
+divided by `divide-x`, mobile cells stacked with `divide-y`. Each cell repeats
+the same anatomy — `dt` label (14px), value `dd` (`text-3xl` semibold
+`tabular-nums`, 30px), scope `dd` (12px muted), optional action link. There are
+no gradient fills, decorative metric icons, or growth arrows. Drill-downs are
+real text `Link`s, and publication status stays a compact badge row with
+readiness links for unpublished schools. Aggregation is server-side and
+school-scoped (`dashboard/overview/queries.ts`); a query failure renders an
+unavailable panel, never substituted zeros.
+
+## Inline editors
+
+Trial-class and FAQ create/edit share one inline editor pattern
+(`dashboard/settings/ui/record-editor.tsx`): a bordered `bg-card/40` form with a
+contextual heading, shared `controlClass` fields, Save + Cancel (Cancel confirms
+when dirty), and a result bar. Success announcements render in a section-level
+`role="status"` region outside the editor so they survive the editor closing.
+
 ## Copy
 
 One page heading. No default subtitle. Navigation items are label-only.
