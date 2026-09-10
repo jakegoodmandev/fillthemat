@@ -310,6 +310,18 @@ The setup-owned origin is a **core assumption** of the multi-worktree workflow:
 - Stop this worktree's frontend with `bun run dev:stop`. It SIGTERMs listeners on the origin in `.env.local` and does not touch Supabase or other worktrees.
 - A worktree keeps its assignment across reruns. Removing the worktree directory allows a later setup to reclaim its port.
 
+**When the worktree is done** (from the worktree, then the repo root):
+
+```bash
+cd .worktrees/<name>
+bun run dev:stop          # only this tree's Next; leaves Supabase alone
+cd ../..
+git worktree remove .worktrees/<name>
+# git branch -d <branch>   # optional, if you created a throwaway branch
+```
+
+Do not `supabase stop` from the child tree. Do not hand-delete `.git/fillthemat-ports/<port>` — setup treats the port as free once the worktree path is gone. Use `git worktree remove --force` only if git refuses because of leftover files.
+
 ---
 
 ## Decision log
