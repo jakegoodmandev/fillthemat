@@ -38,5 +38,8 @@ describe("nextEditorAction", () => {
     expect(
       nextEditorAction(create, closed, { dirty: false, saving: false }),
     ).toBe("apply");
+    expect(
+      nextEditorAction(editA, closed, { dirty: false, saving: false }),
+    ).toBe("apply");
   });
 });

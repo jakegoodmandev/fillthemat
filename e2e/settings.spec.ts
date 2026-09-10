@@ -284,6 +284,29 @@ test("a trial class can be edited, saved, reloaded, and edited again", async ({
   ).toBeVisible();
 });
 
+test("cancel on a clean editor closes immediately without asking", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/settings?section=offerings");
+  const row = page
+    .getByRole("region", { name: "Your trial classes" })
+    .getByRole("listitem")
+    .filter({ hasText: "Kids beginner trial" })
+    .first();
+  await row.getByRole("button", { name: "Edit" }).click();
+  await expect(
+    page.getByRole("button", { name: "Save Changes" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save Changes" })).toHaveCount(
+    0,
+  );
+  await expect(row.getByRole("button", { name: "Edit" })).toBeVisible();
+});
+
 test("switching records while dirty asks before discarding", async ({
   page,
 }) => {
