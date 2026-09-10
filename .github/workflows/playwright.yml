@@ -9,7 +9,9 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
+  pages: write
+  id-token: write
   pull-requests: write
 
 env:
@@ -22,9 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.4.0
 
@@ -46,7 +48,7 @@ jobs:
 
       - name: Upload HTML report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
@@ -55,49 +57,75 @@ jobs:
 
       - name: Upload traces, screenshots, and videos
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-test-results
           path: test-results/
           retention-days: 14
           if-no-files-found: ignore
 
+      - name: Publish visual report to GitHub Pages
+        id: pages
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: peaceiris/actions-gh-pages@v4.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: playwright-report
+          destination_dir: playwright/${{ github.event.pull_request.number || github.run_id }}
+          keep_files: true
+          force_orphan: false
+          commit_message: "Playwright report ${{ github.event.pull_request.number || github.run_id }}"
+
+      - name: Ensure GitHub Pages site
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/pages" >/dev/null 2>&1 || \
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/pages" \
+              -f build_type=legacy \
+              -f "source[branch]=gh-pages" \
+              -f "source[path]=/"
+
       - name: Write job summary
         if: ${{ !cancelled() }}
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPORT_URL: https://jakegoodmandev.github.io/fillthemat/playwright/${{ github.event.pull_request.number || github.run_id }}/
         run: |
           {
             echo "## Playwright"
             echo ""
             echo "Status: **${{ steps.playwright.outcome || job.status }}**"
             echo ""
+            echo "Visual report (screenshots + traces in the browser):"
+            echo ""
+            echo "${REPORT_URL}"
+            echo ""
+            echo "Open a test, then **Screenshot** or **Trace** to see the UI."
+            echo ""
             echo "Artifacts on this [workflow run](${RUN_URL}):"
             echo ""
             echo "- \`playwright-report\` — HTML report"
-            echo "- \`playwright-test-results\` — traces, screenshots, videos (failures)"
-            echo ""
-            echo "Open the HTML report locally:"
-            echo ""
-            echo "\`\`\`bash"
-            echo "gh run download ${{ github.run_id }} -n playwright-report"
-            echo "bunx playwright show-report playwright-report"
-            echo "\`\`\`"
+            echo "- \`playwright-test-results\` — traces, screenshots, videos"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment results on the PR
         if: github.event_name == 'pull_request' && !cancelled()
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPORT_URL: https://jakegoodmandev.github.io/fillthemat/playwright/${{ github.event.pull_request.number }}/
         with:
           script: |
             const fs = require("fs");
             const marker = "<!-- playwright-pr-report -->";
             const passed = "${{ steps.playwright.outcome }}" === "success";
             const runUrl = process.env.RUN_URL;
-            const runId = "${{ github.run_id }}";
+            const reportUrl = process.env.REPORT_URL;
 
             const failed = [];
             try {
@@ -123,21 +151,14 @@ jobs:
               "",
               `**${passed ? "Passed" : "Failed"}** · [workflow run](${runUrl})`,
               "",
-              "Artifacts (Checks → this run, or `gh run download`):",
-              "- `playwright-report` — HTML report",
-              "- `playwright-test-results` — traces / screenshots / videos on failure",
+              `**Visual report:** ${reportUrl}`,
+              "",
+              "Click a test, then Screenshot or Trace to inspect the UI in the browser.",
+              "No download needed.",
             ];
             if (failed.length > 0) {
               lines.push("", "Failed tests:", ...failed.map((title) => `- ${title}`));
             }
-            lines.push(
-              "",
-              "```bash",
-              `gh run download ${runId} -n playwright-report`,
-              "bunx playwright show-report playwright-report",
-              "```",
-              "",
-            );
             const body = lines.join("\n");
 
             const { data: comments } = await github.rest.issues.listComments({
