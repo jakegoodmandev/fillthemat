@@ -39,9 +39,12 @@ export function useRecordEditor(category: string) {
 
   const requestOpen = useCallback(
     (target: EditorTarget) => {
+      // Server actions are not abortable. Never unmount (or even prompt to
+      // discard) while a save is in flight — the mutation would still land.
+      if (saving) return;
       const action = nextEditorAction(open, target, {
         dirty: categoryDirty,
-        saving,
+        saving: false,
       });
       if (action === "noop") return;
       if (action === "confirm") {
