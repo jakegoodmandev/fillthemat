@@ -94,7 +94,7 @@ bunx vercel env pull            # OIDC for real booking chat
 | `DATABASE_URL` / `DIRECT_URL` | `postgresql://postgres:postgres@127.0.0.1:54322/postgres` | Yes — written by setup |
 | `NEXT_PUBLIC_SUPABASE_URL` | `http://127.0.0.1:54321` | Yes — written by setup |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | from `supabase status -o env` | Yes — written by setup |
-| `PORT` / `NEXT_PUBLIC_SITE_URL` | `3000 + n*10` / `http://127.0.0.1:<PORT>` (claimed per worktree) | Yes — written by setup. Next ignores `PORT` in `.env`; `bun run dev` passes `--port`. |
+| `NEXT_PUBLIC_SITE_URL` | `http://127.0.0.1:3000` (or `:3010` … `:3090` per worktree) | Yes — written by setup. `bun run dev` parses the port from this URL. |
 | `CRON_SECRET` | generated UUID | Yes (cron route rejects empty) |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare always-pass test keys | Yes for booking forms; safe to commit as defaults in the generator |
 | `RESEND_API_KEY` / `RESEND_FROM` / `RESEND_WEBHOOK_SECRET` | unset | No — local mail adapter logs instead of sending |
@@ -265,7 +265,7 @@ Prerequisites: **Bun 1.4.x** (`package.json#packageManager`) and a **Docker Engi
 1. `bun install`
 2. Agents: `bun run skills:install` (see `AGENTS.md` / `skills-lock.json`).
 3. `bun run setup` — starts Supabase, writes `.env.local`, migrates. If something fails: `bun run doctor`.
-4. `bun run dev` → the origin setup printed (`http://127.0.0.1:30X0` on the main checkout, 1 <= X <= 9). Worktrees: `git worktree add .worktrees/<task> -b feat/<task>`, then `bun quickstart` in that tree (new app port, same Docker). Do not `supabase stop` from a child tree.
+4. `bun run dev` → the origin setup printed (`http://127.0.0.1:30X0` on the main checkout, 1 <= X <= 9). Worktrees: from the repo root, `git worktree add .worktrees/<name> -b <branch>`, then `bun quickstart` in that tree (new app port, same Docker). Do not `supabase stop` from a child tree.
 5. Sign in at `/sign-in` with `owner@local.test` / `local-dev-password`. Preview then publish `/s/demo` from the dashboard (school is pre-approved).
 6. Optional Google: Web client callback `http://127.0.0.1:54321/auth/v1/callback`, real values in `supabase/.env`, then `bun run supabase:stop && bun run setup`.
 7. Optional full fidelity: `bunx vercel env pull` for real chat; Resend test key + `RESEND_FROM=onboarding@resend.dev` for real mail (owner inbox only). Without them, chat stubs and email rows still complete.
@@ -274,18 +274,41 @@ Checks: `bun run check`, `bun run test`. Do not run `bun run db:migrate:prod` un
 
 ### Worktree frontend ports
 
-Worktrees reuse the already-running Supabase on fixed ports; do not start or stop a second stack. `bun run setup` claims a Next port (`3000`, `3010`, … `3090`) in `.git/fillthemat-slots.json` and writes matching `PORT` + `NEXT_PUBLIC_SITE_URL` values for that tree. Auth `additional_redirect_urls` allow that range; restart Supabase once after pulling this config change.
+Worktrees reuse the already-running Supabase on fixed ports; do not start or stop a second stack. Each tree gets its own Next origin from `bun run setup`. Auth `additional_redirect_urls` allow `http://127.0.0.1:3000` … `:3090`; restart Supabase once after pulling that config change.
 
-The setup-owned port is a **core assumption** of the multi-worktree workflow:
+Put every extra checkout at **`.worktrees/<name>`** (gitignored) from the repo root:
+
+```bash
+git worktree add .worktrees/<name> -b <branch>
+cd .worktrees/<name>
+bun quickstart
+```
+
+**How a port is claimed** (`scripts/local-ports.ts`):
+
+1. `bun run setup` asks git for `--git-common-dir` (the main repo `.git`, shared by every linked worktree) and `--show-toplevel` (this checkout’s path).
+2. It writes a **claim file** under that shared git dir:
+
+   ```
+   .git/fillthemat-ports/3000  →  /absolute/path/to/main/checkout
+   .git/fillthemat-ports/3010  →  /absolute/path/to/.worktrees/feat-x
+   ```
+
+   One file per port. One line: the worktree that owns it. Creating the file with exclusive `wx` is the only lock — if two setups race on `:3000`, one wins and the other takes `:3010`.
+3. If the path in a claim file no longer exists (worktree removed), the next setup treats that port as free.
+4. Setup then writes `NEXT_PUBLIC_SITE_URL=http://127.0.0.1:<port>` into **this** worktree’s `.env.local`. That URL is the source of truth for `bun run dev` and `bun run dev:stop` (they parse the port; there is no `PORT=` env).
+5. Re-running setup in the same tree keeps that URL. A first run with no URL picks the lowest free port in `3000, 3010, … 3090`.
+
+These files live inside `.git`, so they are not committed. Do not put them in a worktree-local `.git` (linked worktrees would not see each other).
+
+The setup-owned origin is a **core assumption** of the multi-worktree workflow:
 
 - Use the origin printed by `bun run setup` and then start the frontend with plain `bun run dev`.
-- Do not run `PORT=… bun run dev`, pass another `--port`, or manually edit `PORT` / `NEXT_PUBLIC_SITE_URL`. An ambient `PORT` can override the persisted assignment at dev time and leave generated URLs or auth redirects pointing at the wrong frontend. If your shell or agent harness defines `PORT`, unset it before setup/dev.
-- Reserve eligible ports `3000`, `3010`, … `3090` for Fillthemat worktrees. A new explicit or migrated assignment is not guaranteed to detect an unrelated listener already using that port.
-- If Next reports `EADDRINUSE`, or `bun run doctor` reports a site URL mismatch, stop and report the collision. Do not work around it by selecting an arbitrary port; that bypasses the registry and Auth allow-list.
-- Stop this worktree's frontend with `bun run dev:stop`. It SIGTERMs listeners on the setup-owned `PORT` from `.env.local` and does not touch Supabase or other worktrees.
-- A worktree keeps its assignment across reruns. Removing the worktree directory allows a later setup to reclaim its slot.
-
-This is an accepted local-only limitation: it can prevent a frontend from starting or send local redirects to another worktree, but it does not affect hosted production or create a separate database. The agent contract above avoids the known cases until allocator hardening is worth doing.
+- Do not pass `--port` or manually edit `NEXT_PUBLIC_SITE_URL`. `bun run dev` binds the port parsed from that URL.
+- Reserve eligible ports `3000`, `3010`, … `3090` for Fillthemat worktrees.
+- If Next reports `EADDRINUSE`, or `bun run doctor` reports an ineligible site URL, stop and report the collision. Do not pick an arbitrary port; that bypasses the Auth allow-list.
+- Stop this worktree's frontend with `bun run dev:stop`. It SIGTERMs listeners on the origin in `.env.local` and does not touch Supabase or other worktrees.
+- A worktree keeps its assignment across reruns. Removing the worktree directory allows a later setup to reclaim its port.
 
 ---
 

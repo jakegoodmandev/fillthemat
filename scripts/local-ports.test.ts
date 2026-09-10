@@ -2,53 +2,44 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  appPortForSlot,
-  claimAppSlot,
-  localSiteUrl,
-  parsePort,
-  slotForAppPort,
-} from "./local-ports";
+import { claimAppPort, localSiteUrl, portFromSiteUrl } from "./local-ports";
 
 function tempGitCommon(): string {
-  const root = mkdtempSync(join(tmpdir(), "fillthemat-slots-"));
+  const root = mkdtempSync(join(tmpdir(), "fillthemat-ports-"));
   const gitCommon = join(root, ".git");
   mkdirSync(gitCommon);
   return gitCommon;
 }
 
-describe("app port formula", () => {
-  it("maps slots 0–9 onto 3000 + n*10", () => {
-    expect(appPortForSlot(0)).toBe(3000);
-    expect(appPortForSlot(2)).toBe(3020);
-    expect(slotForAppPort(3010)).toBe(1);
-    expect(slotForAppPort(3005)).toBeUndefined();
-    expect(slotForAppPort(3100)).toBeUndefined();
+describe("local origin", () => {
+  it("only accepts http://127.0.0.1:3000, 3010, … 3090", () => {
     expect(localSiteUrl(3020)).toBe("http://127.0.0.1:3020");
-    expect(parsePort("3010")).toBe(3010);
-    expect(parsePort("nope")).toBeUndefined();
+    expect(portFromSiteUrl("http://127.0.0.1:3010")).toBe(3010);
+    expect(portFromSiteUrl("http://127.0.0.1:3005")).toBeUndefined();
+    expect(portFromSiteUrl("http://127.0.0.1:3100")).toBeUndefined();
+    expect(portFromSiteUrl("https://fillthemat.com")).toBeUndefined();
   });
 });
 
-describe("claimAppSlot", () => {
-  it("assigns the lowest free slot and reuses it for the same worktree", async () => {
+describe("claimAppPort", () => {
+  it("assigns the lowest free port and reuses it for the same worktree", async () => {
     const gitCommonDir = tempGitCommon();
     const toplevel = join(gitCommonDir, "..", "wt-a");
     mkdirSync(toplevel);
 
-    const first = await claimAppSlot({
+    const first = await claimAppPort({
       toplevel,
       gitCommonDir,
       probe: async () => true,
     });
-    expect(first).toMatchObject({ slot: 0, appPort: 3000, reused: false });
+    expect(first).toBe(3000);
 
-    const second = await claimAppSlot({
+    const second = await claimAppPort({
       toplevel,
       gitCommonDir,
       probe: async () => true,
     });
-    expect(second).toMatchObject({ slot: 0, appPort: 3000, reused: true });
+    expect(second).toBe(3000);
   });
 
   it("gives a second worktree the next port", async () => {
@@ -58,13 +49,13 @@ describe("claimAppSlot", () => {
     mkdirSync(a);
     mkdirSync(b);
 
-    await claimAppSlot({ toplevel: a, gitCommonDir, probe: async () => true });
-    const claimed = await claimAppSlot({
+    await claimAppPort({ toplevel: a, gitCommonDir, probe: async () => true });
+    const claimed = await claimAppPort({
       toplevel: b,
       gitCommonDir,
       probe: async () => true,
     });
-    expect(claimed).toMatchObject({ slot: 1, appPort: 3010, reused: false });
+    expect(claimed).toBe(3010);
   });
 
   it("skips ports that fail the listen probe", async () => {
@@ -73,68 +64,64 @@ describe("claimAppSlot", () => {
     mkdirSync(toplevel);
     const busy = new Set([3000, 3010]);
 
-    const claimed = await claimAppSlot({
+    const claimed = await claimAppPort({
       toplevel,
       gitCommonDir,
       probe: async (port) => !busy.has(port),
     });
-    expect(claimed).toMatchObject({ slot: 2, appPort: 3020 });
+    expect(claimed).toBe(3020);
   });
 
-  it("reaps a slot whose worktree directory is gone", async () => {
+  it("reaps a port whose worktree directory is gone", async () => {
     const gitCommonDir = tempGitCommon();
+    mkdirSync(join(gitCommonDir, "fillthemat-ports"));
     writeFileSync(
-      join(gitCommonDir, "fillthemat-slots.json"),
-      JSON.stringify({
-        version: 1,
-        slots: {
-          "0": { toplevel: join(gitCommonDir, "..", "missing"), appPort: 3000 },
-        },
-      }),
+      join(gitCommonDir, "fillthemat-ports", "3000"),
+      `${join(gitCommonDir, "..", "missing")}\n`,
     );
     const toplevel = join(gitCommonDir, "..", "wt-a");
     mkdirSync(toplevel);
 
-    const claimed = await claimAppSlot({
+    const claimed = await claimAppPort({
       toplevel,
       gitCommonDir,
       probe: async () => true,
     });
-    expect(claimed).toMatchObject({ slot: 0, appPort: 3000, reused: false });
+    expect(claimed).toBe(3000);
   });
 
-  it("keeps a hand-set eligible PORT", async () => {
+  it("keeps a hand-set eligible SITE_URL", async () => {
     const gitCommonDir = tempGitCommon();
     const toplevel = join(gitCommonDir, "..", "wt-a");
     mkdirSync(toplevel);
 
-    const claimed = await claimAppSlot({
+    const claimed = await claimAppPort({
       toplevel,
       gitCommonDir,
-      existingPort: "3020",
+      existingUrl: "http://127.0.0.1:3020",
       probe: async () => true,
     });
-    expect(claimed).toMatchObject({ slot: 2, appPort: 3020, reused: true });
+    expect(claimed).toBe(3020);
   });
 
-  it("rejects a PORT already claimed by another worktree", async () => {
+  it("rejects a SITE_URL already claimed by another worktree", async () => {
     const gitCommonDir = tempGitCommon();
     const a = join(gitCommonDir, "..", "wt-a");
     const b = join(gitCommonDir, "..", "wt-b");
     mkdirSync(a);
     mkdirSync(b);
-    await claimAppSlot({
+    await claimAppPort({
       toplevel: a,
       gitCommonDir,
-      existingPort: "3010",
+      existingUrl: "http://127.0.0.1:3010",
       probe: async () => true,
     });
 
     await expect(
-      claimAppSlot({
+      claimAppPort({
         toplevel: b,
         gitCommonDir,
-        existingPort: "3010",
+        existingUrl: "http://127.0.0.1:3010",
         probe: async () => true,
       }),
     ).rejects.toThrow(/already claimed/);

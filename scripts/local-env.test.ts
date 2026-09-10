@@ -4,7 +4,6 @@ import {
   mergeLocalEnv,
   missingRequiredKeys,
   parseSupabaseStatusEnv,
-  stringifyDotenv,
   TURNSTILE_TEST_SECRET_KEY,
   TURNSTILE_TEST_SITE_KEY,
 } from "./local-env";
@@ -33,6 +32,7 @@ describe("mergeLocalEnv", () => {
         RESEND_API_KEY: "re_test",
         VERCEL_OIDC_TOKEN: "oidc",
         CRON_SECRET: "keep-me",
+        PORT: "9999",
       },
       {
         apiUrl: "http://127.0.0.1:54321",
@@ -42,7 +42,7 @@ describe("mergeLocalEnv", () => {
       "generated-secret",
     );
     expect(merged.NEXT_PUBLIC_SITE_URL).toBe(LOCAL_SITE_URL);
-    expect(merged.PORT).toBe("3000");
+    expect(merged.PORT).toBeUndefined();
     expect(merged.CRON_SECRET).toBe("keep-me");
     expect(merged.NEXT_PUBLIC_TURNSTILE_SITE_KEY).toBe(TURNSTILE_TEST_SITE_KEY);
     expect(merged.TURNSTILE_SECRET_KEY).toBe(TURNSTILE_TEST_SECRET_KEY);
@@ -74,21 +74,9 @@ describe("mergeLocalEnv", () => {
         dbUrl: "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
       },
       "generated-secret",
-      { appPort: 3020 },
+      "http://127.0.0.1:3020",
     );
-    expect(merged.PORT).toBe("3020");
     expect(merged.NEXT_PUBLIC_SITE_URL).toBe("http://127.0.0.1:3020");
     expect(missingRequiredKeys(merged)).toEqual([]);
-  });
-});
-
-describe("stringifyDotenv", () => {
-  it("quotes values that need it", () => {
-    const text = stringifyDotenv({
-      CRON_SECRET: "a b",
-      DATABASE_URL: "postgres://x",
-    });
-    expect(text).toContain('CRON_SECRET="a b"');
-    expect(text).toContain("DATABASE_URL=postgres://x");
   });
 });

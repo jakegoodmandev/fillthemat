@@ -1,11 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseEnv } from "node:util";
-import { APP_PORT_BASE, localSiteUrl } from "./local-ports";
+import { APP_PORTS, localSiteUrl } from "./local-ports";
 
-export const LOCAL_SITE_URL = localSiteUrl(APP_PORT_BASE);
-export const LOCAL_DB_FALLBACK =
-  "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+export const LOCAL_SITE_URL = localSiteUrl(APP_PORTS[0]);
 
 /** Cloudflare Turnstile always-pass dummy keys (public, safe for local). */
 export const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
@@ -16,78 +14,31 @@ export const REQUIRED_LOCAL_KEYS = [
   "DIRECT_URL",
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-  "PORT",
   "NEXT_PUBLIC_SITE_URL",
   "CRON_SECRET",
   "NEXT_PUBLIC_TURNSTILE_SITE_KEY",
   "TURNSTILE_SECRET_KEY",
 ] as const;
 
-const PRESERVE_IF_SET = [
-  "RESEND_API_KEY",
-  "RESEND_FROM",
-  "RESEND_WEBHOOK_SECRET",
-  "BOOKING_AGENT_MODEL",
-  "VERCEL_OIDC_TOKEN",
-  "ALLOW_SELF_APPROVAL",
-  "NEXT_PUBLIC_DEV_AUTH",
-] as const;
-
-const KEY_ORDER = [
-  "DATABASE_URL",
-  "DIRECT_URL",
-  "NEXT_PUBLIC_SUPABASE_URL",
-  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-  "PORT",
-  "NEXT_PUBLIC_SITE_URL",
-  "CRON_SECRET",
-  "NEXT_PUBLIC_TURNSTILE_SITE_KEY",
-  "TURNSTILE_SECRET_KEY",
-  "ALLOW_SELF_APPROVAL",
-  "NEXT_PUBLIC_DEV_AUTH",
-  "BOOKING_AGENT_MODEL",
-  "RESEND_API_KEY",
-  "RESEND_FROM",
-  "RESEND_WEBHOOK_SECRET",
-  "VERCEL_OIDC_TOKEN",
-];
-
-function envRecord(text: string): Record<string, string> {
+export function readEnvFile(path: string): Record<string, string> {
+  if (!existsSync(path)) return {};
+  const parsed = parseEnv(readFileSync(path, "utf8"));
   const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(parseEnv(text))) {
+  for (const [key, value] of Object.entries(parsed)) {
     if (value !== undefined) out[key] = value;
   }
   return out;
 }
 
-export function readEnvFile(path: string): Record<string, string> {
-  if (!existsSync(path)) return {};
-  return envRecord(readFileSync(path, "utf8"));
-}
-
-function quote(value: string): string {
-  if (/^[A-Za-z0-9_./:=+@-]+$/.test(value)) return value;
-  return JSON.stringify(value);
-}
-
-export function stringifyDotenv(vars: Record<string, string>): string {
-  const keys = [
-    ...KEY_ORDER.filter((key) => key in vars),
-    ...Object.keys(vars)
-      .filter((key) => !KEY_ORDER.includes(key))
-      .sort(),
-  ];
-  const lines = ["# Generated/merged by bun run setup. Do not commit.", ""];
-  for (const key of keys) {
-    lines.push(`${key}=${quote(vars[key] ?? "")}`);
-  }
-  lines.push("");
-  return lines.join("\n");
-}
-
 export function writeEnvFile(path: string, vars: Record<string, string>) {
   mkdirSync(dirname(path) || ".", { recursive: true });
-  writeFileSync(path, stringifyDotenv(vars));
+  const body = Object.entries(vars)
+    .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+    .join("\n");
+  writeFileSync(
+    path,
+    `# Generated/merged by bun run setup. Do not commit.\n\n${body}\n`,
+  );
 }
 
 export type SupabaseStatusEnv = {
@@ -99,19 +50,15 @@ export type SupabaseStatusEnv = {
   serviceRoleKey?: string;
 };
 
+/** Parse `supabase status -o env` (`API_URL`, `ANON_KEY`, `DB_URL`, …). */
 export function parseSupabaseStatusEnv(text: string): SupabaseStatusEnv {
   const env = parseEnv(text);
-  const apiUrl =
-    env.API_URL ?? env.SUPABASE_URL ?? env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey =
-    env.ANON_KEY ??
-    env.PUBLISHABLE_KEY ??
-    env.SUPABASE_ANON_KEY ??
-    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  const dbUrl = env.DB_URL ?? env.DATABASE_URL ?? LOCAL_DB_FALLBACK;
-  if (!apiUrl || !publishableKey) {
+  const apiUrl = env.API_URL;
+  const publishableKey = env.ANON_KEY;
+  const dbUrl = env.DB_URL;
+  if (!apiUrl || !publishableKey || !dbUrl) {
     throw new Error(
-      "Could not read API_URL/ANON_KEY from supabase status. Is the local stack running?",
+      "Could not read API_URL/ANON_KEY/DB_URL from supabase status. Is the local stack running?",
     );
   }
   return {
@@ -120,40 +67,32 @@ export function parseSupabaseStatusEnv(text: string): SupabaseStatusEnv {
     dbUrl,
     studioUrl: env.STUDIO_URL,
     inbucketUrl: env.INBUCKET_URL,
-    serviceRoleKey: env.SERVICE_ROLE_KEY ?? env.SERVICE_ROLE,
+    serviceRoleKey: env.SERVICE_ROLE_KEY,
   };
 }
-
-export type LocalAppBind = {
-  appPort: number;
-};
 
 export function mergeLocalEnv(
   existing: Record<string, string>,
   status: SupabaseStatusEnv,
   generatedSecret: string,
-  bind: LocalAppBind = { appPort: APP_PORT_BASE },
+  siteUrl = LOCAL_SITE_URL,
 ): Record<string, string> {
-  const next: Record<string, string> = { ...existing };
-  next.DATABASE_URL = status.dbUrl;
-  next.DIRECT_URL = status.dbUrl;
-  next.NEXT_PUBLIC_SUPABASE_URL = status.apiUrl;
-  next.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = status.publishableKey;
-  next.PORT = String(bind.appPort);
-  next.NEXT_PUBLIC_SITE_URL = localSiteUrl(bind.appPort);
-  next.CRON_SECRET = existing.CRON_SECRET || generatedSecret;
-  next.NEXT_PUBLIC_TURNSTILE_SITE_KEY =
-    existing.NEXT_PUBLIC_TURNSTILE_SITE_KEY || TURNSTILE_TEST_SITE_KEY;
-  next.TURNSTILE_SECRET_KEY =
-    existing.TURNSTILE_SECRET_KEY || TURNSTILE_TEST_SECRET_KEY;
-  next.ALLOW_SELF_APPROVAL = existing.ALLOW_SELF_APPROVAL || "true";
-  next.NEXT_PUBLIC_DEV_AUTH = existing.NEXT_PUBLIC_DEV_AUTH || "true";
-
-  for (const key of PRESERVE_IF_SET) {
-    const value = existing[key];
-    if (value) next[key] = value;
-  }
-  return next;
+  const { PORT: _droppedPort, ...kept } = existing;
+  return {
+    ...kept,
+    DATABASE_URL: status.dbUrl,
+    DIRECT_URL: status.dbUrl,
+    NEXT_PUBLIC_SUPABASE_URL: status.apiUrl,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: status.publishableKey,
+    NEXT_PUBLIC_SITE_URL: siteUrl,
+    CRON_SECRET: existing.CRON_SECRET || generatedSecret,
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY:
+      existing.NEXT_PUBLIC_TURNSTILE_SITE_KEY || TURNSTILE_TEST_SITE_KEY,
+    TURNSTILE_SECRET_KEY:
+      existing.TURNSTILE_SECRET_KEY || TURNSTILE_TEST_SECRET_KEY,
+    ALLOW_SELF_APPROVAL: existing.ALLOW_SELF_APPROVAL || "true",
+    NEXT_PUBLIC_DEV_AUTH: existing.NEXT_PUBLIC_DEV_AUTH || "true",
+  };
 }
 
 export function missingRequiredKeys(env: Record<string, string>): string[] {

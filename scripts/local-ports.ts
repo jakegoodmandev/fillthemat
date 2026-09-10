@@ -1,87 +1,67 @@
+/**
+ * Assign each git worktree its own local Next.js port.
+ *
+ * Why: every worktree shares one Docker/Supabase stack (fixed API/DB ports),
+ * but each `bun run dev` needs a unique listen port. Auth redirects are
+ * allow-listed for the ten origins below (`supabase/config.toml`).
+ *
+ * Where: claims live in the **shared** git dir, not the worktree:
+ *
+ *   git rev-parse --git-common-dir   →  usually `<repo>/.git`
+ *   `<that>/fillthemat-ports/3010`   →  one-line file, worktree absolute path
+ *
+ * Linked worktrees have their own checkout but the same `--git-common-dir`,
+ * so they all see the same claim files. Example:
+ *
+ *   .git/fillthemat-ports/3000  →  /Users/you/Code/fillthemat
+ *   .git/fillthemat-ports/3010  →  /Users/you/Code/fillthemat/.worktrees/feat-x
+ *
+ * The file *is* the lock: `writeFileSync(..., { flag: "wx" })` creates it or
+ * fails if another setup got there first. Contents are the owning worktree
+ * path. If that path is gone, the claim is stale and the next setup reuses
+ * the port.
+ *
+ * Persistence in the worktree is `NEXT_PUBLIC_SITE_URL` in `.env.local`
+ * (e.g. http://127.0.0.1:3010). `bun run setup` claims, then writes that URL.
+ * `bun run dev` / `dev:stop` parse the port from it. Re-running setup with
+ * that URL already set keeps the same port instead of hopping.
+ */
 import {
-  closeSync,
   existsSync,
   mkdirSync,
-  openSync,
   readFileSync,
-  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { tryCapture } from "./local-process";
 
-export const APP_PORT_BASE = 3000;
-export const APP_PORT_STRIDE = 10;
-export const MAX_SLOT = 9;
-export const SLOT_REGISTRY_NAME = "fillthemat-slots.json";
+/** Allowed local Next ports. Must match `supabase/config.toml` redirect URLs. */
+export const APP_PORTS = [
+  3000, 3010, 3020, 3030, 3040, 3050, 3060, 3070, 3080, 3090,
+] as const;
 
-const LOCK_STALE_MS = 30_000;
-const LOCK_RETRY_MS = 50;
-const LOCK_ATTEMPTS = 50;
-
-export type SlotClaim = {
-  slot: number;
-  appPort: number;
-  reused: boolean;
-};
-
-export type SlotRegistry = {
-  version: 1;
-  slots: Record<string, { toplevel: string; appPort: number }>;
-};
-
-export function appPortForSlot(slot: number): number {
-  return APP_PORT_BASE + slot * APP_PORT_STRIDE;
-}
+/** Directory name under `--git-common-dir` (do not commit; it lives in `.git`). */
+const PORTS_DIR = "fillthemat-ports";
 
 export function localSiteUrl(port: number): string {
   return `http://127.0.0.1:${port}`;
 }
 
-export function parsePort(value: string | undefined): number | undefined {
-  if (!value || !/^\d+$/.test(value)) return undefined;
-  const port = Number(value);
-  if (port < 1 || port > 65535) return undefined;
-  return port;
+export function portFromSiteUrl(url: string | undefined): number | undefined {
+  const match = url?.match(/^http:\/\/127\.0\.0\.1:(\d+)$/);
+  if (!match) return undefined;
+  const port = Number(match[1]);
+  return (APP_PORTS as readonly number[]).includes(port) ? port : undefined;
 }
 
-export function slotForAppPort(port: number): number | undefined {
-  const delta = port - APP_PORT_BASE;
-  if (delta < 0 || delta % APP_PORT_STRIDE !== 0) return undefined;
-  const slot = delta / APP_PORT_STRIDE;
-  if (!Number.isInteger(slot) || slot > MAX_SLOT) return undefined;
-  return slot;
-}
-
-export function emptyRegistry(): SlotRegistry {
-  return { version: 1, slots: {} };
-}
-
-export function parseSlotRegistry(text: string): SlotRegistry {
-  const parsed: unknown = JSON.parse(text);
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    (parsed as SlotRegistry).version !== 1 ||
-    typeof (parsed as SlotRegistry).slots !== "object" ||
-    (parsed as SlotRegistry).slots === null
-  ) {
-    throw new Error(`Invalid ${SLOT_REGISTRY_NAME}`);
-  }
-  return parsed as SlotRegistry;
-}
-
-export function isListenFree(
-  port: number,
-  host = "127.0.0.1",
-): Promise<boolean> {
+function isListenFree(port: number): Promise<boolean> {
   return new Promise((resolveFree) => {
     const server = createServer();
     server.unref();
     server.once("error", () => resolveFree(false));
-    server.listen(port, host, () => {
+    server.listen(port, "127.0.0.1", () => {
       server.close(() => resolveFree(true));
     });
   });
@@ -90,200 +70,127 @@ export function isListenFree(
 function git(args: string[]): string | undefined {
   const result = tryCapture("git", args);
   if (!result.ok) return undefined;
-  const value = result.stdout.trim();
-  return value || undefined;
+  return result.stdout.trim() || undefined;
 }
 
-function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+function portFile(gitCommonDir: string, port: number): string {
+  return join(gitCommonDir, PORTS_DIR, String(port));
 }
 
-async function withSlotLock<T>(
-  lockPath: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  mkdirSync(dirname(lockPath), { recursive: true });
-  for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
-    try {
-      const fd = openSync(lockPath, "wx");
+function readOwner(path: string): string | undefined {
+  if (!existsSync(path)) return undefined;
+  return readFileSync(path, "utf8").trim() || undefined;
+}
+
+function dropOtherClaims(gitCommonDir: string, toplevel: string, keep: number) {
+  for (const port of APP_PORTS) {
+    if (port === keep) continue;
+    const file = portFile(gitCommonDir, port);
+    if (readOwner(file) === toplevel) {
       try {
-        writeFileSync(fd, String(process.pid));
-        return await fn();
-      } finally {
-        closeSync(fd);
-        try {
-          unlinkSync(lockPath);
-        } catch {
-          // ignore
-        }
+        unlinkSync(file);
+      } catch {
+        // ignore
       }
-    } catch (error) {
-      const code =
-        error && typeof error === "object" && "code" in error
-          ? (error as { code?: string }).code
-          : undefined;
-      if (code !== "EEXIST") throw error;
-      stealStaleLock(lockPath);
-      await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
     }
   }
-  throw new Error(
-    `Could not lock ${lockPath}. Another bun run setup may be running.`,
-  );
 }
 
-function stealStaleLock(lockPath: string) {
-  if (!existsSync(lockPath)) return;
-  try {
-    const stat = statSync(lockPath);
-    const pid = Number(readFileSync(lockPath, "utf8").trim());
-    const staleAge = Date.now() - stat.mtimeMs > LOCK_STALE_MS;
-    const dead = !Number.isFinite(pid) || !isPidAlive(pid);
-    if (staleAge || dead) unlinkSync(lockPath);
-  } catch {
-    // raced with the holder
-  }
-}
-
-function readRegistry(path: string): SlotRegistry {
-  if (!existsSync(path)) return emptyRegistry();
-  return parseSlotRegistry(readFileSync(path, "utf8"));
-}
-
-function writeRegistry(path: string, registry: SlotRegistry) {
-  writeFileSync(path, `${JSON.stringify(registry, null, 2)}\n`);
-}
-
-function reapMissingWorktrees(registry: SlotRegistry) {
-  for (const [slot, row] of Object.entries(registry.slots)) {
-    if (!existsSync(row.toplevel)) delete registry.slots[slot];
-  }
-}
-
-function rowForToplevel(
-  registry: SlotRegistry,
-  toplevel: string,
-): { slot: number; appPort: number } | undefined {
-  for (const [key, row] of Object.entries(registry.slots)) {
-    if (row.toplevel === toplevel) {
-      return { slot: Number(key), appPort: row.appPort };
-    }
-  }
-  return undefined;
-}
-
-function slotOwner(registry: SlotRegistry, slot: number): string | undefined {
-  return registry.slots[String(slot)]?.toplevel;
-}
-
-function portOwner(registry: SlotRegistry, port: number): string | undefined {
-  for (const row of Object.values(registry.slots)) {
-    if (row.appPort === port) return row.toplevel;
-  }
-  return undefined;
-}
-
-function takeSlot(
-  registry: SlotRegistry,
-  toplevel: string,
-  slot: number,
-  appPort: number,
-) {
-  for (const [key, row] of Object.entries(registry.slots)) {
-    if (row.toplevel === toplevel) delete registry.slots[key];
-  }
-  registry.slots[String(slot)] = { toplevel, appPort };
-}
-
-export type ClaimAppSlotOptions = {
+export type ClaimAppPortOptions = {
   toplevel: string;
   gitCommonDir: string;
-  existingPort?: string;
+  existingUrl?: string;
   probe?: (port: number) => Promise<boolean>;
 };
 
-export async function claimAppSlot(
-  options: ClaimAppSlotOptions,
-): Promise<SlotClaim> {
+/** Claim a port for `toplevel` (reuse existing URL / existing claim if any). */
+export async function claimAppPort(
+  options: ClaimAppPortOptions,
+): Promise<number> {
   const probe = options.probe ?? isListenFree;
-  const registryPath = join(options.gitCommonDir, SLOT_REGISTRY_NAME);
-  const lockPath = `${registryPath}.lock`;
+  mkdirSync(join(options.gitCommonDir, PORTS_DIR), { recursive: true });
 
-  return withSlotLock(lockPath, async () => {
-    const registry = readRegistry(registryPath);
-    reapMissingWorktrees(registry);
-
-    const wantedPort = parsePort(options.existingPort);
-    if (options.existingPort && wantedPort === undefined) {
-      throw new Error(`Invalid PORT=${options.existingPort}`);
-    }
-    if (wantedPort !== undefined) {
-      const slot = slotForAppPort(wantedPort);
-      if (slot === undefined) {
-        throw new Error(
-          `PORT=${wantedPort} is not an eligible worktree port (use 3000, 3010, … 3090).`,
-        );
-      }
-      const owner =
-        slotOwner(registry, slot) ?? portOwner(registry, wantedPort);
-      if (owner && owner !== options.toplevel) {
-        throw new Error(
-          `PORT=${wantedPort} is already claimed by ${owner}. Unset PORT or pick a free slot.`,
-        );
-      }
-      takeSlot(registry, options.toplevel, slot, wantedPort);
-      writeRegistry(registryPath, registry);
-      return { slot, appPort: wantedPort, reused: true };
-    }
-
-    const existing = rowForToplevel(registry, options.toplevel);
-    if (existing) {
-      writeRegistry(registryPath, registry);
-      return { slot: existing.slot, appPort: existing.appPort, reused: true };
-    }
-
-    for (let slot = 0; slot <= MAX_SLOT; slot++) {
-      const owner = slotOwner(registry, slot);
-      if (owner && owner !== options.toplevel) continue;
-      const appPort = appPortForSlot(slot);
-      const portTakenBy = portOwner(registry, appPort);
-      if (portTakenBy && portTakenBy !== options.toplevel) continue;
-      if (!(await probe(appPort))) continue;
-      takeSlot(registry, options.toplevel, slot, appPort);
-      writeRegistry(registryPath, registry);
-      return { slot, appPort, reused: false };
-    }
-
+  const preferred = portFromSiteUrl(options.existingUrl);
+  if (options.existingUrl && preferred === undefined) {
     throw new Error(
-      `No free app port in ${APP_PORT_BASE}–${appPortForSlot(MAX_SLOT)} (slots 0–${MAX_SLOT}). Stop an extra bun run dev or remove a stale worktree.`,
+      `NEXT_PUBLIC_SITE_URL=${options.existingUrl} is not an eligible local origin (use http://127.0.0.1:3000, :3010, … :3090).`,
     );
-  });
+  }
+
+  if (preferred === undefined) {
+    for (const port of APP_PORTS) {
+      if (
+        readOwner(portFile(options.gitCommonDir, port)) === options.toplevel
+      ) {
+        return port;
+      }
+    }
+  }
+
+  const ports = preferred === undefined ? APP_PORTS : [preferred];
+  for (const port of ports) {
+    const file = portFile(options.gitCommonDir, port);
+    const owner = readOwner(file);
+    if (owner === options.toplevel) return port;
+    if (owner && existsSync(owner)) {
+      if (preferred !== undefined) {
+        throw new Error(
+          `Port ${port} is already claimed by ${owner}. Unset NEXT_PUBLIC_SITE_URL or pick a free origin.`,
+        );
+      }
+      continue;
+    }
+    if (owner) {
+      try {
+        unlinkSync(file);
+      } catch {
+        if (preferred !== undefined) {
+          throw new Error(
+            `Port ${port} is already claimed. Retry bun run setup.`,
+          );
+        }
+        continue;
+      }
+    }
+    if (preferred === undefined && !(await probe(port))) continue;
+    try {
+      writeFileSync(file, `${options.toplevel}\n`, { flag: "wx" });
+    } catch {
+      if (preferred !== undefined) {
+        throw new Error(
+          `Port ${port} is already claimed. Retry bun run setup.`,
+        );
+      }
+      continue;
+    }
+    dropOtherClaims(options.gitCommonDir, options.toplevel, port);
+    return port;
+  }
+
+  throw new Error(
+    `No free app port in ${APP_PORTS[0]}–${APP_PORTS[APP_PORTS.length - 1]}. Stop an extra bun run dev or remove a stale worktree.`,
+  );
 }
 
-export async function claimAppSlotForCwd(
-  existingPort?: string,
-): Promise<SlotClaim> {
+export async function claimAppPortForCwd(
+  existingUrl?: string,
+): Promise<number> {
   const toplevel = git(["rev-parse", "--show-toplevel"]);
   const gitCommonDirRaw = git(["rev-parse", "--git-common-dir"]);
   if (!toplevel || !gitCommonDirRaw) {
-    const appPort = parsePort(existingPort) ?? APP_PORT_BASE;
-    const slot = slotForAppPort(appPort);
-    if (existingPort && slot === undefined) {
+    if (!existingUrl) return APP_PORTS[0];
+    const port = portFromSiteUrl(existingUrl);
+    if (port === undefined) {
       throw new Error(
-        `PORT=${existingPort} is not an eligible worktree port (use 3000, 3010, … 3090).`,
+        `NEXT_PUBLIC_SITE_URL=${existingUrl} is not an eligible local origin (use http://127.0.0.1:3000, :3010, … :3090).`,
       );
     }
-    return { slot: slot ?? 0, appPort, reused: Boolean(existingPort) };
+    return port;
   }
 
-  return claimAppSlot({
+  return claimAppPort({
     toplevel,
     gitCommonDir: resolve(gitCommonDirRaw),
-    existingPort,
+    existingUrl,
   });
 }

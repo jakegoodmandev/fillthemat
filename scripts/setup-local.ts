@@ -6,7 +6,7 @@ import {
   readEnvFile,
   writeEnvFile,
 } from "./local-env";
-import { claimAppSlotForCwd, localSiteUrl } from "./local-ports";
+import { claimAppPortForCwd, localSiteUrl } from "./local-ports";
 import { fail, tryCapture } from "./local-process";
 
 const ENV_LOCAL = ".env.local";
@@ -60,19 +60,15 @@ async function main() {
   });
   const status = parseSupabaseStatusEnv(statusText);
   const existing = readEnvFile(ENV_LOCAL);
-  const portHint =
-    existing.PORT ||
-    existing.NEXT_PUBLIC_SITE_URL?.match(/^http:\/\/127\.0\.0\.1:(\d+)$/)?.[1];
-  const claim = await claimAppSlotForCwd(portHint).catch((error) =>
-    fail(error instanceof Error ? error.message : String(error)),
+  const appPort = await claimAppPortForCwd(existing.NEXT_PUBLIC_SITE_URL).catch(
+    (error) => fail(error instanceof Error ? error.message : String(error)),
   );
+  const siteUrl = localSiteUrl(appPort);
   const generatedSecret = `${crypto.randomUUID()}${crypto.randomUUID()}`;
-  const merged = mergeLocalEnv(existing, status, generatedSecret, {
-    appPort: claim.appPort,
-  });
+  const merged = mergeLocalEnv(existing, status, generatedSecret, siteUrl);
   writeEnvFile(ENV_LOCAL, merged);
   console.log(
-    `Wrote ${ENV_LOCAL} (existing vendor keys preserved; app slot ${claim.slot} → ${localSiteUrl(claim.appPort)}).`,
+    `Wrote ${ENV_LOCAL} (existing vendor keys preserved; app ${siteUrl}).`,
   );
 
   console.log("Applying Drizzle migrations…");
@@ -92,9 +88,7 @@ async function main() {
   console.log("Local stack is ready.");
   if (status.studioUrl) console.log(`  Studio    ${status.studioUrl}`);
   if (status.inbucketUrl) console.log(`  Inbucket  ${status.inbucketUrl}`);
-  console.log(
-    `  App       bun run dev  → ${localSiteUrl(claim.appPort)}  (slot ${claim.slot})`,
-  );
+  console.log(`  App       bun run dev  → ${siteUrl}`);
   console.log("");
   console.log("  Sign in   owner@local.test / local-dev-password");
   console.log("");

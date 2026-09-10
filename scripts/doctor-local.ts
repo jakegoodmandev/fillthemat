@@ -3,7 +3,7 @@ import {
   parseSupabaseStatusEnv,
   readEnvFile,
 } from "./local-env";
-import { localSiteUrl, parsePort, slotForAppPort } from "./local-ports";
+import { portFromSiteUrl } from "./local-ports";
 import { fail, tryCapture } from "./local-process";
 
 const ENV_LOCAL = ".env.local";
@@ -68,21 +68,14 @@ function main() {
       `${ENV_LOCAL} missing: ${missing.join(", ")}. Run bun run setup.`,
     ) && healthy;
 
-  const appPort = parsePort(env.PORT);
-  if (env.PORT && appPort === undefined) {
+  const appPort = portFromSiteUrl(env.NEXT_PUBLIC_SITE_URL);
+  if (env.NEXT_PUBLIC_SITE_URL && appPort === undefined) {
     healthy = false;
-    console.error(`err Invalid PORT=${env.PORT}. Run bun run setup.`);
+    console.error(
+      `err NEXT_PUBLIC_SITE_URL=${env.NEXT_PUBLIC_SITE_URL} is not an eligible local origin (http://127.0.0.1:3000, :3010, … :3090). Run bun run setup.`,
+    );
   } else if (appPort !== undefined) {
-    const slot = slotForAppPort(appPort);
-    const expectedSite = localSiteUrl(appPort);
-    const slotLabel = slot === undefined ? "custom" : `slot ${slot}`;
-    console.log(`ok  app ${expectedSite} (${slotLabel})`);
-    if (env.NEXT_PUBLIC_SITE_URL && env.NEXT_PUBLIC_SITE_URL !== expectedSite) {
-      healthy = false;
-      console.error(
-        `err NEXT_PUBLIC_SITE_URL=${env.NEXT_PUBLIC_SITE_URL} does not match PORT=${appPort} (${expectedSite}). Run bun run setup.`,
-      );
-    }
+    console.log(`ok  app ${env.NEXT_PUBLIC_SITE_URL}`);
   }
 
   if (env.VERCEL_OIDC_TOKEN)

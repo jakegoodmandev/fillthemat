@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readEnvFile } from "./local-env";
-import { parsePort } from "./local-ports";
+import { portFromSiteUrl } from "./local-ports";
 import { fail } from "./local-process";
 
 function listenPids(port: number): number[] {
@@ -22,10 +22,11 @@ function listenPids(port: number): number[] {
   return [...pids];
 }
 
-const envPort = readEnvFile(".env.local").PORT;
-const port = parsePort(envPort);
+const port = portFromSiteUrl(readEnvFile(".env.local").NEXT_PUBLIC_SITE_URL);
 if (port === undefined) {
-  fail("Invalid or missing PORT in .env.local. Run bun run setup.");
+  fail(
+    "Invalid or missing NEXT_PUBLIC_SITE_URL in .env.local. Run bun run setup.",
+  );
 }
 
 const pids = listenPids(port);

@@ -1,12 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { readEnvFile } from "./local-env";
-import { parsePort } from "./local-ports";
+import { portFromSiteUrl } from "./local-ports";
 import { fail } from "./local-process";
 
-const envPort = process.env.PORT || readEnvFile(".env.local").PORT || "3000";
-const port = parsePort(envPort);
+const siteUrl = readEnvFile(".env.local").NEXT_PUBLIC_SITE_URL;
+const port = portFromSiteUrl(siteUrl);
 if (port === undefined) {
-  fail(`Invalid PORT=${envPort}. Run bun run setup.`);
+  fail(
+    "Invalid or missing NEXT_PUBLIC_SITE_URL in .env.local. Run bun run setup.",
+  );
 }
 
 const extra = process.argv.slice(2);
