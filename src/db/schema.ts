@@ -48,6 +48,13 @@ export const whatsappDeliveryStateEnum = appSchema.enum(
   ["pending", "claimed", "sent", "delivered", "read", "failed"],
 );
 
+export const whatsappJobStateEnum = appSchema.enum("whatsapp_job_state", [
+  "pending",
+  "claimed",
+  "done",
+  "failed",
+]);
+
 export const messageCompletionEnum = appSchema.enum("message_completion", [
   "complete",
   "streaming",
@@ -592,11 +599,13 @@ export const whatsappDeliveries = appSchema.table(
     providerId: text("provider_id"),
     templateName: text("template_name"),
     templateParams: jsonb("template_params").$type<unknown>(),
+    body: text("body"),
     windowExpiresAt: timestamp("window_expires_at", { withTimezone: true }),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     sentAt: timestamp("sent_at", { withTimezone: true }),
+    statusAt: timestamp("status_at", { withTimezone: true }),
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
     claimedBy: text("claimed_by"),
     lastError: text("last_error"),
@@ -620,6 +629,36 @@ export const whatsappDeliveries = appSchema.table(
       foreignColumns: [leads.schoolId, leads.id],
       name: "whatsapp_deliveries_lead_fk",
     }).onDelete("cascade"),
+  ],
+);
+
+export const whatsappJobs = appSchema.table(
+  "whatsapp_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schoolId: uuid("school_id"),
+    phoneNumberId: text("phone_number_id").notNull(),
+    dedupeKey: text("dedupe_key").notNull(),
+    kind: text("kind").notNull().default("inbound_message"),
+    payload: jsonb("payload").notNull().$type<unknown>(),
+    state: whatsappJobStateEnum("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimedBy: text("claimed_by"),
+    lastError: text("last_error"),
+    ...timestamps,
+  },
+  (t) => [
+    unique("whatsapp_jobs_dedupe_key").on(t.dedupeKey),
+    index("whatsapp_jobs_due_idx").on(t.state, t.nextAttemptAt),
+    foreignKey({
+      columns: [t.schoolId],
+      foreignColumns: [schools.id],
+      name: "whatsapp_jobs_school_id_fk",
+    }).onDelete("set null"),
   ],
 );
 
@@ -677,5 +716,6 @@ export type Lead = typeof leads.$inferSelect;
 export type Booking = typeof bookings.$inferSelect;
 export type EmailDelivery = typeof emailDeliveries.$inferSelect;
 export type WhatsAppDelivery = typeof whatsappDeliveries.$inferSelect;
+export type WhatsAppJob = typeof whatsappJobs.$inferSelect;
 export type FunnelEvent = typeof funnelEvents.$inferSelect;
 export type CronRun = typeof cronRuns.$inferSelect;

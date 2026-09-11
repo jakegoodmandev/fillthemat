@@ -28,3 +28,17 @@ export function whatsappAppSecret(): string | null {
 export function whatsappVerifyToken(): string | null {
   return resolveConfig("WHATSAPP_VERIFY_TOKEN", WHATSAPP_STUB_VERIFY_TOKEN);
 }
+
+export function whatsappSystemUserToken(): string | null {
+  return process.env.WHATSAPP_SYSTEM_USER_TOKEN ?? null;
+}
+
+export function whatsappApiVersion(): string {
+  return process.env.WHATSAPP_API_VERSION || "v23.0";
+}
+
+export function whatsappGraphBase(): string {
+  return (
+    process.env.WHATSAPP_GRAPH_BASE || "https://graph.facebook.com"
+  ).replace(/\/+$/, "");
+}

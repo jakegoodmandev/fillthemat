@@ -3,9 +3,11 @@ import {
   whatsappAppSecret,
   whatsappVerifyToken,
 } from "@/lib/whatsapp/config";
-import { persistInboundMessage } from "@/lib/whatsapp/inbound";
+import { applyWhatsAppStatuses } from "@/lib/whatsapp/deliveries";
+import { enqueueInboundJobs } from "@/lib/whatsapp/jobs";
 import { parseInboundWhatsAppMessages } from "@/lib/whatsapp/parse";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp/signature";
+import { parseInboundWhatsAppStatuses } from "@/lib/whatsapp/status";
 
 /**
  * The body is read with `request.text()` BEFORE any signature check so the
@@ -52,14 +54,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid" }, { status: 400 });
   }
 
-  // Persist each inbound message (dedupe by wamid) but always ack 200 fast so
-  // Meta does not retry the whole webhook on an unknown/empty message.
-  for (const message of parseInboundWhatsAppMessages(payload)) {
-    try {
-      await persistInboundMessage(message);
-    } catch (error) {
-      console.error("whatsapp: inbound persist failed", error);
-    }
+  // Enqueue-then-ack (decision D12): the webhook never runs the agent. Inbound
+  // messages become `whatsapp_jobs` rows (idempotent by wamid) for the worker;
+  // status callbacks are applied directly by `provider_id` (wamid). Always ack
+  // 200 fast so Meta does not retry the whole webhook on a small/unknown event.
+  const statuses = parseInboundWhatsAppStatuses(payload);
+  const messages = parseInboundWhatsAppMessages(payload);
+  try {
+    if (statuses.length > 0) await applyWhatsAppStatuses(statuses);
+    if (messages.length > 0) await enqueueInboundJobs(messages);
+  } catch (error) {
+    console.error("whatsapp: webhook enqueue/status failed", error);
   }
 
   return Response.json({ ok: true });

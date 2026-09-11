@@ -116,8 +116,15 @@ export function createBookingAgent({
         inputSchema: z.object({
           offeringId: z.string().uuid(),
           slotId: z.string().min(1),
+          participantName: z.string().trim().min(1).max(80).optional(),
+          participantAge: z.number().int().min(0).max(99).optional(),
         }),
-        execute: async ({ offeringId, slotId }) => {
+        execute: async ({
+          offeringId,
+          slotId,
+          participantName,
+          participantAge,
+        }) => {
           const offering = offerings.find(
             (row) => row.id === offeringId && row.active,
           );
@@ -136,6 +143,10 @@ export function createBookingAgent({
           if (!slot) return { ok: false, reason: "slot_unavailable" };
           return {
             ok: true,
+            participant: {
+              name: participantName ?? null,
+              age: participantAge ?? null,
+            },
             offering: {
               id: offering.id,
               name: offering.name,

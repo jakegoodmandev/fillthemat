@@ -4,5 +4,8 @@ export const config: VercelConfig = {
   bunVersion: "1.4.x",
   buildCommand: "bun run build",
   framework: "nextjs",
-  crons: [{ path: "/api/cron/maintenance", schedule: "0 14 * * *" }],
+  crons: [
+    { path: "/api/cron/maintenance", schedule: "0 14 * * *" },
+    { path: "/api/cron/whatsapp", schedule: "* * * * *" },
+  ],
 };
