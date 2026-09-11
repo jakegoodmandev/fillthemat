@@ -151,7 +151,19 @@ export async function sendWhatsAppDelivery(
     .from(schools)
     .where(eq(schools.id, delivery.schoolId))
     .limit(1);
-  if (!school?.approvedAt) return "failed";
+  if (!school?.approvedAt) {
+    await db
+      .update(whatsappDeliveries)
+      .set({
+        state: "failed",
+        lastError: "school_not_approved",
+        attempts: delivery.attempts + 1,
+        nextAttemptAt: nextBackoff(delivery.attempts + 1),
+        updatedAt: new Date(),
+      })
+      .where(eq(whatsappDeliveries.id, delivery.id));
+    return "failed";
+  }
 
   const plan = planWhatsAppDelivery({
     templateName: delivery.templateName,
