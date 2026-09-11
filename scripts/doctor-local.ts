@@ -88,6 +88,26 @@ function main() {
       "…   RESEND_API_KEY missing (email deliveries log + mark sent)",
     );
 
+  if (env.WHATSAPP_SYSTEM_USER_TOKEN)
+    console.log("ok  WHATSAPP_SYSTEM_USER_TOKEN present (real WhatsApp send)");
+  else
+    console.log(
+      "…   WHATSAPP_SYSTEM_USER_TOKEN missing (WhatsApp uses local stub)",
+    );
+
+  if (env.WHATSAPP_APP_SECRET) console.log("ok  WHATSAPP_APP_SECRET present");
+  else
+    console.log(
+      "…   WHATSAPP_APP_SECRET missing (webhook verify uses dev-stub secret locally)",
+    );
+
+  if (env.WHATSAPP_VERIFY_TOKEN)
+    console.log("ok  WHATSAPP_VERIFY_TOKEN present");
+  else
+    console.log(
+      "…   WHATSAPP_VERIFY_TOKEN missing (GET verify uses dev-stub token locally)",
+    );
+
   if (!healthy) fail("doctor found problems.");
   console.log("doctor passed.");
 }

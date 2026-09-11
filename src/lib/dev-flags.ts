@@ -18,3 +18,10 @@ export function isLocalAiStub(): boolean {
     process.env.NODE_ENV !== "production" && !process.env.VERCEL_OIDC_TOKEN
   );
 }
+
+export function isLocalWhatsAppNoop(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    !process.env.WHATSAPP_SYSTEM_USER_TOKEN
+  );
+}

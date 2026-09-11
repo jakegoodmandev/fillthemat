@@ -43,6 +43,11 @@ export const emailStateEnum = appSchema.enum("email_state", [
   "complained",
 ]);
 
+export const whatsappDeliveryStateEnum = appSchema.enum(
+  "whatsapp_delivery_state",
+  ["pending", "claimed", "sent", "delivered", "read", "failed"],
+);
+
 export const messageCompletionEnum = appSchema.enum("message_completion", [
   "complete",
   "streaming",
@@ -86,6 +91,8 @@ export const schools = appSchema.table(
     publishedAt: timestamp("published_at", { withTimezone: true }),
     previewedAt: timestamp("previewed_at", { withTimezone: true }),
     notificationEmail: text("notification_email").notNull(),
+    whatsappPhoneNumberId: text("whatsapp_phone_number_id"),
+    whatsappWabaId: text("whatsapp_waba_id"),
     phone: text("phone"),
     website: text("website"),
     address: text("address"),
@@ -105,6 +112,9 @@ export const schools = appSchema.table(
     unique("schools_owner_user_id_unique").on(t.ownerUserId),
     unique("schools_slug_unique").on(t.slug),
     unique("schools_school_id_unique").on(t.id),
+    uniqueIndex("schools_whatsapp_phone_number_id_unique")
+      .on(t.whatsappPhoneNumberId)
+      .where(sql`${t.whatsappPhoneNumberId} IS NOT NULL`),
     check(
       "schools_slug_format",
       sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length(${t.slug}) BETWEEN 3 AND 48`,
@@ -261,7 +271,7 @@ export const contacts = appSchema.table(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     schoolId: uuid("school_id").notNull(),
-    email: text("email").notNull(),
+    email: text("email"),
     name: text("name").notNull(),
     phone: text("phone").notNull(),
     ...timestamps,
@@ -269,6 +279,7 @@ export const contacts = appSchema.table(
   (t) => [
     unique("contacts_school_id_id").on(t.schoolId, t.id),
     unique("contacts_school_email").on(t.schoolId, t.email),
+    unique("contacts_school_phone").on(t.schoolId, t.phone),
     foreignKey({
       columns: [t.schoolId],
       foreignColumns: [schools.id],
@@ -347,6 +358,7 @@ export const conversations = appSchema.table(
     landingSessionId: uuid("landing_session_id"),
     contactId: uuid("contact_id"),
     resumeTokenHash: text("resume_token_hash").notNull(),
+    waIdHash: text("wa_id_hash"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     generatingAt: timestamp("generating_at", { withTimezone: true }),
     ...timestamps,
@@ -354,6 +366,9 @@ export const conversations = appSchema.table(
   (t) => [
     unique("conversations_school_id_id").on(t.schoolId, t.id),
     unique("conversations_resume_token_hash").on(t.resumeTokenHash),
+    uniqueIndex("conversations_school_wa_id_hash")
+      .on(t.schoolId, t.waIdHash)
+      .where(sql`${t.waIdHash} IS NOT NULL`),
     foreignKey({
       columns: [t.schoolId],
       foreignColumns: [schools.id],
@@ -562,6 +577,52 @@ export const emailDeliveries = appSchema.table(
   ],
 );
 
+export const whatsappDeliveries = appSchema.table(
+  "whatsapp_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schoolId: uuid("school_id").notNull(),
+    bookingId: uuid("booking_id"),
+    leadId: uuid("lead_id"),
+    recipientWaId: text("recipient_wa_id").notNull(),
+    phoneNumberId: text("phone_number_id").notNull(),
+    providerIdempotencyKey: text("provider_idempotency_key").notNull(),
+    state: whatsappDeliveryStateEnum("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    providerId: text("provider_id"),
+    templateName: text("template_name"),
+    templateParams: jsonb("template_params").$type<unknown>(),
+    windowExpiresAt: timestamp("window_expires_at", { withTimezone: true }),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimedBy: text("claimed_by"),
+    lastError: text("last_error"),
+    ...timestamps,
+  },
+  (t) => [
+    unique("whatsapp_deliveries_provider_key").on(t.providerIdempotencyKey),
+    index("whatsapp_deliveries_due_idx").on(t.state, t.nextAttemptAt),
+    foreignKey({
+      columns: [t.schoolId],
+      foreignColumns: [schools.id],
+      name: "whatsapp_deliveries_school_id_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.schoolId, t.bookingId],
+      foreignColumns: [bookings.schoolId, bookings.id],
+      name: "whatsapp_deliveries_booking_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.schoolId, t.leadId],
+      foreignColumns: [leads.schoolId, leads.id],
+      name: "whatsapp_deliveries_lead_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
 export const funnelEvents = appSchema.table(
   "funnel_events",
   {
@@ -615,5 +676,6 @@ export type Message = typeof messages.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type Booking = typeof bookings.$inferSelect;
 export type EmailDelivery = typeof emailDeliveries.$inferSelect;
+export type WhatsAppDelivery = typeof whatsappDeliveries.$inferSelect;
 export type FunnelEvent = typeof funnelEvents.$inferSelect;
 export type CronRun = typeof cronRuns.$inferSelect;
