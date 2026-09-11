@@ -358,6 +358,7 @@ export const conversations = appSchema.table(
     landingSessionId: uuid("landing_session_id"),
     contactId: uuid("contact_id"),
     resumeTokenHash: text("resume_token_hash").notNull(),
+    waIdHash: text("wa_id_hash"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     generatingAt: timestamp("generating_at", { withTimezone: true }),
     ...timestamps,
@@ -365,6 +366,7 @@ export const conversations = appSchema.table(
   (t) => [
     unique("conversations_school_id_id").on(t.schoolId, t.id),
     unique("conversations_resume_token_hash").on(t.resumeTokenHash),
+    unique("conversations_school_wa_id_hash").on(t.schoolId, t.waIdHash),
     foreignKey({
       columns: [t.schoolId],
       foreignColumns: [schools.id],

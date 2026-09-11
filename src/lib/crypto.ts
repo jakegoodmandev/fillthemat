@@ -12,6 +12,10 @@ export function hashIp(ip: string): string {
   return createHash("sha256").update(`ip:${ip}`).digest("hex");
 }
 
+export function hashWaId(waId: string): string {
+  return createHash("sha256").update(`wa:${waId}`).digest("hex");
+}
+
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }

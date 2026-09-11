@@ -1,0 +1,35 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102290129340398",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550000000",
+              "phone_number_id": "106500000000000"
+            },
+            "contacts": [
+              {
+                "profile": { "name": "Alex Rivera" },
+                "wa_id": "16505551234"
+              }
+            ],
+            "messages": [
+              {
+                "from": "16505551234",
+                "id": "wamid.HBgLMjY1MDUSMTIzNDVBMUIx",
+                "timestamp": "1690000000",
+                "type": "text",
+                "text": { "body": "Hi, is there a beginner trial this week?" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
