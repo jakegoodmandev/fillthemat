@@ -1,0 +1,1 @@
+ALTER TABLE "app"."bookings" ALTER COLUMN "contact_email_snapshot" SET NOT NULL;

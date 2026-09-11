@@ -1,8 +1,11 @@
 import { createHmac, randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { addDays } from "date-fns";
+import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
 import { conversations, messages, schools, users } from "@/db/schema";
+import { hashWaId } from "@/lib/crypto";
+import { MAX_CHAT_MESSAGES_PER_CONVERSATION } from "@/lib/security/limits";
 import {
   WHATSAPP_STUB_APP_SECRET,
   WHATSAPP_STUB_VERIFY_TOKEN,
@@ -89,6 +92,20 @@ async function conversationCount() {
   return rows.length;
 }
 
+async function conversationForWa(waId: string) {
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.schoolId, schoolId),
+        eq(conversations.waIdHash, hashWaId(waId)),
+      ),
+    )
+    .limit(1);
+  return rows[0];
+}
+
 beforeAll(async () => {
   await insertAuthUser(sql, ownerId, `wa-${suffix}@local.test`);
   await db.insert(users).values({
@@ -168,6 +185,75 @@ describe("POST /api/webhooks/whatsapp", () => {
     });
     const response = await POST(request);
     expect(response.status).toBe(413);
+  });
+
+  it("releases generatingAt after persisting an inbound message", async () => {
+    const payload = inboundPayload();
+    payload.entry[0].changes[0].value.messages[0].id = "wamid.release-lock";
+    const response = await POST(post(payload));
+    expect(response.status).toBe(200);
+    const conversation = await conversationForWa("16505551234");
+    expect(conversation).toBeTruthy();
+    expect(conversation?.generatingAt).toBeNull();
+  });
+
+  it("serializes concurrent inbound on the same conversation", async () => {
+    const before = await messageCount();
+    const first = inboundPayload();
+    first.entry[0].changes[0].value.messages[0].id = "wamid.concurrent-a";
+    const second = inboundPayload();
+    second.entry[0].changes[0].value.messages[0].id = "wamid.concurrent-b";
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      POST(post(first)),
+      POST(post(second)),
+    ]);
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(await messageCount()).toBe(before + 2);
+    expect(await conversationCount()).toBe(1);
+    const conversation = await conversationForWa("16505551234");
+    expect(conversation?.generatingAt).toBeNull();
+  });
+
+  it("caps a conversation at MAX_CHAT_MESSAGES_PER_CONVERSATION", async () => {
+    const capWaId = "16505559999";
+    const seed = inboundPayload();
+    seed.entry[0].changes[0].value.contacts[0].wa_id = capWaId;
+    seed.entry[0].changes[0].value.messages[0].from = capWaId;
+    seed.entry[0].changes[0].value.messages[0].id = "wamid.cap-seed";
+    expect((await POST(post(seed))).status).toBe(200);
+
+    const conversation = await conversationForWa(capWaId);
+    expect(conversation).toBeTruthy();
+
+    const purgeAt = addDays(new Date(), 30);
+    const fill = MAX_CHAT_MESSAGES_PER_CONVERSATION - 1;
+    if (fill > 0) {
+      await db.insert(messages).values(
+        Array.from({ length: fill }, (_, i) => ({
+          conversationId: conversation!.id,
+          messageId: `wamid.cap-fill-${i}`,
+          role: "user" as const,
+          parts: [{ type: "text", text: `fill ${i}` }],
+          completion: "complete" as const,
+          purgeAt,
+        })),
+      );
+    }
+
+    const over = inboundPayload();
+    over.entry[0].changes[0].value.contacts[0].wa_id = capWaId;
+    over.entry[0].changes[0].value.messages[0].from = capWaId;
+    over.entry[0].changes[0].value.messages[0].id = "wamid.cap-over";
+    expect((await POST(post(over))).status).toBe(200);
+
+    const rows = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.conversationId, conversation!.id));
+    expect(rows.length).toBe(MAX_CHAT_MESSAGES_PER_CONVERSATION);
   });
 });
 

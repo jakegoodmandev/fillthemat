@@ -366,7 +366,9 @@ export const conversations = appSchema.table(
   (t) => [
     unique("conversations_school_id_id").on(t.schoolId, t.id),
     unique("conversations_resume_token_hash").on(t.resumeTokenHash),
-    unique("conversations_school_wa_id_hash").on(t.schoolId, t.waIdHash),
+    uniqueIndex("conversations_school_wa_id_hash")
+      .on(t.schoolId, t.waIdHash)
+      .where(sql`${t.waIdHash} IS NOT NULL`),
     foreignKey({
       columns: [t.schoolId],
       foreignColumns: [schools.id],
@@ -471,7 +473,7 @@ export const bookings = appSchema.table(
     endAt: timestamp("end_at", { withTimezone: true }).notNull(),
     locationSnapshot: text("location_snapshot"),
     instructionsSnapshot: text("instructions_snapshot"),
-    contactEmailSnapshot: text("contact_email_snapshot"),
+    contactEmailSnapshot: text("contact_email_snapshot").notNull(),
     contactNameSnapshot: text("contact_name_snapshot").notNull(),
     contactPhoneSnapshot: text("contact_phone_snapshot").notNull(),
     icsUid: text("ics_uid").notNull(),
