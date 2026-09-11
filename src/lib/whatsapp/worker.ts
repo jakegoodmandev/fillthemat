@@ -113,7 +113,7 @@ export async function processWhatsAppJob(
         purgeAt: resolved.purgeAt,
       });
 
-      const replyText = run.text;
+      const replyText = run;
       const assistantMessageId = generateId();
       await persistAssistantMessage({
         conversationId,
@@ -148,12 +148,12 @@ export async function processWhatsAppJob(
       await releaseGenerating(conversationId);
     }
   } catch (error) {
+    // `releaseGenerating` is handled by the inner `finally`: the lock is only
+    // ever held between `claimGenerating` and that finally, so there is no
+    // second release here (fail the job + backoff, never leak the lock).
     const message =
       error instanceof Error ? error.message : "whatsapp_job_failed";
     await failJob(job.id, job.attempts, message);
-    if (conversationId) {
-      await releaseGenerating(conversationId).catch(() => {});
-    }
     console.error("whatsapp: job failed", job.id, message);
     return "failed";
   }
@@ -177,6 +177,11 @@ export async function drainWhatsAppJobs(
 /**
  * One full worker tick: process due inbound jobs, then due outbound deliveries
  * (retries/backoff) — no infinite tail-chasing of freshly-claimed rows.
+ *
+ * The drain below only re-claims `pending`/`failed` rows whose `nextAttemptAt`
+ * is due. Delivery rows sent inline above (in `processWhatsAppJob`) are already
+ * `sent`, and failed inline rows have a future `nextAttemptAt`, so neither needs
+ * re-picking-up here.
  */
 export async function runWhatsAppWorkerOnce(runId: string) {
   const jobs = await drainWhatsAppJobs(runId);
