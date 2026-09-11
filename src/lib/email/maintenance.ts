@@ -36,7 +36,7 @@ export async function createDueReminderDeliveries(now = new Date()) {
         schoolId: booking.schoolId,
         bookingId: booking.id,
         kind: "booking_reminder",
-        recipient: booking.contactEmailSnapshot ?? "",
+        recipient: booking.contactEmailSnapshot,
         providerIdempotencyKey: `booking-reminder/${booking.id}`,
         state: "pending",
       })

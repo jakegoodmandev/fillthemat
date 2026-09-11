@@ -241,7 +241,7 @@ export default async function BookingsPage({
   );
 }
 
-function ContactLine({ name, email }: { name: string; email: string | null }) {
+function ContactLine({ name, email }: { name: string; email: string }) {
   return (
     <span className="break-all">
       {name}

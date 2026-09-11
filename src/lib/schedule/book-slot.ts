@@ -503,7 +503,7 @@ export async function cancelBooking({
         schoolId,
         bookingId: booking.id,
         kind: "booking_cancellation",
-        recipient: booking.contactEmailSnapshot ?? "",
+        recipient: booking.contactEmailSnapshot,
         providerIdempotencyKey: `booking-cancellation/${booking.id}/${nextSequence}`,
         state: "pending",
       },
@@ -511,8 +511,7 @@ export async function cancelBooking({
         schoolId,
         bookingId: booking.id,
         kind: "owner_cancellation",
-        recipient:
-          school?.notificationEmail ?? booking.contactEmailSnapshot ?? "",
+        recipient: school?.notificationEmail ?? booking.contactEmailSnapshot,
         providerIdempotencyKey: `owner-cancellation/${booking.id}/${nextSequence}`,
         state: "pending",
       },

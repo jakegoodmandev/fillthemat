@@ -15,6 +15,27 @@
       "when": 1789142306074,
       "tag": "0001_silky_fantastic_four",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789142838227,
+      "tag": "0002_shiny_solo",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789144185534,
+      "tag": "0003_aromatic_shen",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789144195958,
+      "tag": "0004_plain_kulan_gath",
+      "breakpoints": true
     }
   ]
 }

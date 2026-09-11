@@ -14,6 +14,7 @@ import {
   users,
 } from "../src/db/schema";
 import { bookingIcsUid } from "../src/lib/email/ics";
+import { LOCAL_WHATSAPP_PHONE_NUMBER_ID } from "../src/lib/whatsapp/config";
 import { parseSupabaseStatusEnv, readEnvFile } from "./local-env";
 import { fail, tryCapture } from "./local-process";
 
@@ -113,6 +114,7 @@ export async function seedLocal() {
         notificationEmail: LOCAL_OWNER_EMAIL,
         country: "US",
         approvedAt: new Date(),
+        whatsappPhoneNumberId: LOCAL_WHATSAPP_PHONE_NUMBER_ID,
         welcomeMessage: "Welcome to the local demo school.",
       })
       .onConflictDoNothing()
@@ -134,6 +136,7 @@ export async function seedLocal() {
     .set({
       approvedAt: existingSchool?.approvedAt ?? new Date(),
       city: existingSchool?.city ?? "Brooklyn",
+      whatsappPhoneNumberId: LOCAL_WHATSAPP_PHONE_NUMBER_ID,
       updatedAt: new Date(),
     })
     .where(eq(schools.id, schoolId));

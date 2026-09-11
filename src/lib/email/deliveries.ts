@@ -91,10 +91,14 @@ async function renderDelivery(
         .where(eq(contacts.id, lead.contactId))
         .limit(1);
       if (!contact) throw new Error("missing contact");
+      // `contacts.email` is nullable for the Phase 5 WhatsApp no-email path; until
+      // then every contact still has an email. Guard instead of silently building
+      // an owner email addressed to an empty recipient.
+      if (!contact.email) throw new Error("contact has no email");
       return {
         ...ownerLeadEmail(school, lead, {
           name: contact.name,
-          email: contact.email ?? "",
+          email: contact.email,
           phone: contact.phone,
         }),
         attachments: [],
