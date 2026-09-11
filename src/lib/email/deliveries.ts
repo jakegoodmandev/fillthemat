@@ -92,7 +92,11 @@ async function renderDelivery(
         .limit(1);
       if (!contact) throw new Error("missing contact");
       return {
-        ...ownerLeadEmail(school, lead, contact),
+        ...ownerLeadEmail(school, lead, {
+          name: contact.name,
+          email: contact.email ?? "",
+          phone: contact.phone,
+        }),
         attachments: [],
       };
     }

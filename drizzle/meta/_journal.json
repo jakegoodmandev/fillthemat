@@ -8,6 +8,13 @@
       "when": 1787958742739,
       "tag": "0000_left_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789142306074,
+      "tag": "0001_silky_fantastic_four",
+      "breakpoints": true
     }
   ]
 }
