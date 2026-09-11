@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { after } from "next/server";
+import { sendWhatsAppTypingIndicator } from "@/lib/whatsapp/client";
 import {
   WHATSAPP_MAX_BODY_BYTES,
   whatsappAppSecret,
@@ -8,6 +11,7 @@ import { enqueueInboundJobs } from "@/lib/whatsapp/jobs";
 import { parseInboundWhatsAppMessages } from "@/lib/whatsapp/parse";
 import { verifyWhatsAppSignature } from "@/lib/whatsapp/signature";
 import { parseInboundWhatsAppStatuses } from "@/lib/whatsapp/status";
+import { runWhatsAppWorkerOnce } from "@/lib/whatsapp/worker";
 
 /**
  * The body is read with `request.text()` BEFORE any signature check so the
@@ -60,11 +64,49 @@ export async function POST(request: Request) {
   // 200 fast so Meta does not retry the whole webhook on a small/unknown event.
   const statuses = parseInboundWhatsAppStatuses(payload);
   const messages = parseInboundWhatsAppMessages(payload);
+
+  // Perceived-immediacy lever: mark read + typing indicator in one cheap Graph
+  // call, best-effort so Meta's 200 is never hard-gated on it.
+  await Promise.allSettled(
+    messages.map((message) =>
+      sendWhatsAppTypingIndicator({
+        phoneNumberId: message.phoneNumberId,
+        messageId: message.wamid,
+      }),
+    ),
+  );
+
   try {
     if (statuses.length > 0) await applyWhatsAppStatuses(statuses);
     if (messages.length > 0) await enqueueInboundJobs(messages);
   } catch (error) {
     console.error("whatsapp: webhook enqueue/status failed", error);
+  }
+
+  // Wake the worker after the 200 flushes so inbound messages are answered
+  // immediately instead of waiting for the daily cron tick (spike follow-up).
+  // Status-only callbacks don't need a sweep.
+  //
+  // RISK (verify post-deploy): `after()` is implemented via Vercel's `waitUntil`;
+  // support on Vercel's Bun runtime (bunVersion in vercel.ts) is not explicitly
+  // documented. If Bun doesn't honor it, this fast path silently degrades to the
+  // daily cron — the job is already committed/enqueued above, so nothing is lost,
+  // only the instant dispatch. Verify by sending one inbound and confirming the
+  // reply lands in seconds (not at 05:00). Fallback if it doesn't: Supabase
+  // pg_cron (docs/spike-supabase-cron.md) or a Vercel Pro cron.
+  if (messages.length > 0) {
+    const kickWorker = () =>
+      runWhatsAppWorkerOnce(randomUUID()).catch((error) => {
+        console.error("whatsapp: after-worker failed", error);
+      });
+
+    try {
+      after(kickWorker);
+    } catch {
+      // `after` requires a Next request scope; when the handler is invoked
+      // directly (tests / local replay) it throws and the enqueued job is
+      // drained by the daily cron or `bun run whatsapp:worker` instead.
+    }
   }
 
   return Response.json({ ok: true });

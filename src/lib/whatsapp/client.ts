@@ -86,6 +86,27 @@ export function sendWhatsAppText({
   });
 }
 
+/**
+ * Mark an inbound message as read and show a typing indicator in one Graph
+ * call. Returns `providerId: null` because a read receipt has no message id;
+ * `ok: true` means Meta accepted it. This is the perceived-immediacy lever:
+ * the chat shows "typing…" (≈25s TTL) while the worker crafts the real reply.
+ */
+export function sendWhatsAppTypingIndicator({
+  phoneNumberId,
+  messageId,
+}: {
+  phoneNumberId: string;
+  messageId: string;
+}): Promise<WhatsAppSendOutcome> {
+  return graphPost(phoneNumberId, {
+    messaging_product: "whatsapp",
+    status: "read",
+    message_id: messageId,
+    typing_indicator: { type: "text" },
+  });
+}
+
 export function sendWhatsAppTemplate({
   phoneNumberId,
   to,

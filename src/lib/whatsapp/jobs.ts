@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte, or } from "drizzle-orm";
+import { and, eq, inArray, lt, lte, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { whatsappJobs } from "@/db/schema";
 import type { InboundWhatsAppMessage } from "./parse";
@@ -122,4 +122,31 @@ export async function rescheduleJob(
       updatedAt: new Date(),
     })
     .where(eq(whatsappJobs.id, jobId));
+}
+
+/**
+ * Requeue `claimed` jobs whose worker died mid-flight (e.g. an `after()`
+ * invocation that crashed) so a later sweep can retry them instead of
+ * stranding them forever.
+ */
+export async function recoverStuckWhatsAppJobs(
+  staleBeforeMs = 5 * 60_000,
+): Promise<number> {
+  const db = getDb();
+  const rows = await db
+    .update(whatsappJobs)
+    .set({
+      state: "pending",
+      claimedAt: null,
+      claimedBy: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(whatsappJobs.state, "claimed"),
+        lt(whatsappJobs.claimedAt, new Date(Date.now() - staleBeforeMs)),
+      ),
+    )
+    .returning({ id: whatsappJobs.id });
+  return rows.length;
 }

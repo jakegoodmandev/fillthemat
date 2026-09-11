@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte, or } from "drizzle-orm";
+import { and, eq, inArray, lt, lte, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { schools, whatsappDeliveries } from "@/db/schema";
 import { sendWhatsAppTemplate, sendWhatsAppText } from "./client";
@@ -342,4 +342,31 @@ export async function applyWhatsAppStatuses(statuses: InboundWhatsAppStatus[]) {
       })
       .where(eq(whatsappDeliveries.id, delivery.id));
   }
+}
+
+/**
+ * Requeue `claimed` deliveries whose sender died mid-flight so a later sweep
+ * can retry them instead of stranding them forever. Idempotent: only rows
+ * claimed longer than `staleBeforeMs` are touched.
+ */
+export async function recoverStuckWhatsAppDeliveries(
+  staleBeforeMs = 5 * 60_000,
+): Promise<number> {
+  const db = getDb();
+  const rows = await db
+    .update(whatsappDeliveries)
+    .set({
+      state: "pending",
+      claimedAt: null,
+      claimedBy: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(whatsappDeliveries.state, "claimed"),
+        lt(whatsappDeliveries.claimedAt, new Date(Date.now() - staleBeforeMs)),
+      ),
+    )
+    .returning({ id: whatsappDeliveries.id });
+  return rows.length;
 }

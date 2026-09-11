@@ -10,6 +10,7 @@ import {
   attemptWhatsAppDeliveriesNow,
   drainDueWhatsAppDeliveries,
   enqueueWhatsAppDelivery,
+  recoverStuckWhatsAppDeliveries,
 } from "./deliveries";
 import {
   claimGenerating,
@@ -23,6 +24,7 @@ import {
   claimDueWhatsAppJobs,
   failJob,
   markJobDone,
+  recoverStuckWhatsAppJobs,
   rescheduleJob,
 } from "./jobs";
 import { loadValidatedConversationMessages } from "./messages";
@@ -184,6 +186,8 @@ export async function drainWhatsAppJobs(
  * re-picking-up here.
  */
 export async function runWhatsAppWorkerOnce(runId: string) {
+  await recoverStuckWhatsAppJobs();
+  await recoverStuckWhatsAppDeliveries();
   const jobs = await drainWhatsAppJobs(runId);
   const deliveries = await drainDueWhatsAppDeliveries(runId);
   return { jobs, deliveries };

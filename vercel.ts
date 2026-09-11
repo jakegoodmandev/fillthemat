@@ -6,6 +6,9 @@ export const config: VercelConfig = {
   framework: "nextjs",
   crons: [
     { path: "/api/cron/maintenance", schedule: "0 14 * * *" },
-    { path: "/api/cron/whatsapp", schedule: "* * * * *" },
+    // Hobby-safe: Vercel's free tier only allows daily cron intervals. The
+    // fast path is `after()` in the inbound webhook; this daily tick is the
+    // sweeper for retries/backoff and stuck-claim recovery.
+    { path: "/api/cron/whatsapp", schedule: "0 5 * * *" },
   ],
 };
