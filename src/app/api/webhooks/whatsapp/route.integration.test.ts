@@ -3,7 +3,14 @@ import { addDays } from "date-fns";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getDb } from "@/db";
-import { conversations, messages, schools, users } from "@/db/schema";
+import {
+  conversations,
+  messages,
+  schools,
+  users,
+  whatsappDeliveries,
+  whatsappJobs,
+} from "@/db/schema";
 import { hashWaId } from "@/lib/crypto";
 import { MAX_CHAT_MESSAGES_PER_CONVERSATION } from "@/lib/security/limits";
 import {
@@ -11,13 +18,14 @@ import {
   WHATSAPP_STUB_APP_SECRET,
   WHATSAPP_STUB_VERIFY_TOKEN,
 } from "@/lib/whatsapp/config";
-import statusDelivered from "@/test/fixtures/whatsapp/status-delivered.json";
+import { runWhatsAppWorkerOnce } from "@/lib/whatsapp/worker";
 import textInbound from "@/test/fixtures/whatsapp/text-inbound.json";
 import {
   authSql,
   deleteAuthUser,
   insertAuthUser,
   loadLocalEnv,
+  requireRow,
 } from "@/test/integration-env";
 import { GET, POST } from "./route";
 
@@ -29,6 +37,7 @@ const suffix = randomUUID().slice(0, 8);
 const ownerId = randomUUID();
 const phoneNumberId = `199${Date.now().toString().slice(-9)}`;
 const slug = `wa-${suffix}`;
+const waId = "16505551234";
 let schoolId = "";
 
 function sign(body: string, secret = WHATSAPP_STUB_APP_SECRET): string {
@@ -42,7 +51,7 @@ type MetaPayload = {
         {
           value: {
             metadata: { phone_number_id: string };
-            contacts: [{ wa_id: string }];
+            contacts: [{ wa_id: string; profile: { name: string } }];
             messages: [
               {
                 from: string;
@@ -61,6 +70,11 @@ type MetaPayload = {
 function inboundPayload(): MetaPayload {
   const payload = structuredClone(textInbound as unknown as MetaPayload);
   payload.entry[0].changes[0].value.metadata.phone_number_id = phoneNumberId;
+  payload.entry[0].changes[0].value.contacts[0].wa_id = waId;
+  payload.entry[0].changes[0].value.messages[0].from = waId;
+  // wamids are globally unique in production; use a per-run id so the global
+  // `whatsapp_jobs.dedupe_key` uniqueness never collides across test runs.
+  payload.entry[0].changes[0].value.messages[0].id = `wamid.p4.${suffix}`;
   return payload;
 }
 
@@ -76,31 +90,34 @@ function post(payload: unknown, secret = WHATSAPP_STUB_APP_SECRET): Request {
   });
 }
 
-async function messageCount() {
-  const rows = await db
-    .select()
+async function jobCount() {
+  const rows = await db.select().from(whatsappJobs);
+  return rows.filter((row) => row.phoneNumberId === phoneNumberId).length;
+}
+
+async function messageRows() {
+  return db
+    .select({ id: messages.id, role: messages.role })
     .from(messages)
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
     .where(eq(conversations.schoolId, schoolId));
-  return rows.length;
 }
 
-async function conversationCount() {
-  const rows = await db
+async function deliveryRows() {
+  return db
     .select()
-    .from(conversations)
-    .where(eq(conversations.schoolId, schoolId));
-  return rows.length;
+    .from(whatsappDeliveries)
+    .where(eq(whatsappDeliveries.schoolId, schoolId));
 }
 
-async function conversationForWa(waId: string) {
+async function conversationForWa(id: string) {
   const rows = await db
     .select()
     .from(conversations)
     .where(
       and(
         eq(conversations.schoolId, schoolId),
-        eq(conversations.waIdHash, hashWaId(waId)),
+        eq(conversations.waIdHash, hashWaId(id)),
       ),
     )
     .limit(1);
@@ -123,6 +140,7 @@ beforeAll(async () => {
       timezone: "America/New_York",
       notificationEmail: `wa-${suffix}@local.test`,
       whatsappPhoneNumberId: phoneNumberId,
+      approvedAt: new Date(),
     })
     .returning({ id: schools.id });
   if (!school) throw new Error("failed to seed school");
@@ -130,43 +148,22 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Deleting the app user cascades to school -> conversations -> messages;
-  // then remove the matching auth user row.
   await db.delete(users).where(eq(users.id, ownerId));
   await deleteAuthUser(sql, ownerId);
   await sql.end({ timeout: 5 });
 });
 
-describe("POST /api/webhooks/whatsapp", () => {
-  it("persists an inbound message into a new conversation", async () => {
+describe("POST /api/webhooks/whatsapp (enqueue-then-ack)", () => {
+  it("enqueues a job instead of persisting inline", async () => {
     const response = await POST(post(inboundPayload()));
     expect(response.status).toBe(200);
-    expect(await messageCount()).toBe(1);
-    expect(await conversationCount()).toBe(1);
+    expect(await jobCount()).toBe(1);
+    expect(await messageRows()).toHaveLength(0);
   });
 
-  it("dedupes a replayed wamid to a single message row", async () => {
+  it("dedupes a replayed wamid to a single job row", async () => {
     await POST(post(inboundPayload()));
-    await POST(post(inboundPayload()));
-    expect(await messageCount()).toBe(1);
-    expect(await conversationCount()).toBe(1);
-  });
-
-  it("routes a second distinct message from the same wa_id into one conversation", async () => {
-    const payload = inboundPayload();
-    payload.entry[0].changes[0].value.messages[0].id = "wamid.second-message";
-    payload.entry[0].changes[0].value.messages[0].text.body = "What times?";
-    const response = await POST(post(payload));
-    expect(response.status).toBe(200);
-    expect(await messageCount()).toBe(2);
-    expect(await conversationCount()).toBe(1);
-  });
-
-  it("acks status payloads without writing a message row", async () => {
-    const before = await messageCount();
-    const response = await POST(post(statusDelivered));
-    expect(response.status).toBe(200);
-    expect(await messageCount()).toBe(before);
+    expect(await jobCount()).toBe(1);
   });
 
   it("rejects a wrong signature with 401", async () => {
@@ -187,74 +184,213 @@ describe("POST /api/webhooks/whatsapp", () => {
     const response = await POST(request);
     expect(response.status).toBe(413);
   });
+});
 
-  it("releases generatingAt after persisting an inbound message", async () => {
-    const payload = inboundPayload();
-    payload.entry[0].changes[0].value.messages[0].id = "wamid.release-lock";
-    const response = await POST(post(payload));
-    expect(response.status).toBe(200);
-    const conversation = await conversationForWa("16505551234");
+describe("worker + status flow", () => {
+  it("runs the agent to completion and advances delivery pending→claimed→sent", async () => {
+    await runWhatsAppWorkerOnce(randomUUID());
+
+    const rows = await messageRows();
+    const userRows = rows.filter((row) => row.role === "user");
+    const assistantRows = rows.filter((row) => row.role === "assistant");
+    expect(userRows).toHaveLength(1);
+    // The local AI stub produces a deterministic reply even without a model.
+    expect(assistantRows).toHaveLength(1);
+
+    const deliveries = await deliveryRows();
+    expect(deliveries.length).toBeGreaterThanOrEqual(1);
+    expect(deliveries[0].state).toBe("sent");
+    expect(deliveries[0].providerId).toMatch(/^local-noop:/);
+
+    const conversation = await conversationForWa(waId);
     expect(conversation).toBeTruthy();
     expect(conversation?.generatingAt).toBeNull();
   });
 
-  it("serializes concurrent inbound on the same conversation", async () => {
-    const before = await messageCount();
-    const first = inboundPayload();
-    first.entry[0].changes[0].value.messages[0].id = "wamid.concurrent-a";
-    const second = inboundPayload();
-    second.entry[0].changes[0].value.messages[0].id = "wamid.concurrent-b";
+  it("applies a delivered status and ignores an older out-of-order status", async () => {
+    const [delivery] = await deliveryRows();
+    expect(delivery).toBeTruthy();
 
-    const [firstResponse, secondResponse] = await Promise.all([
-      POST(post(first)),
-      POST(post(second)),
-    ]);
+    const statusPayload = {
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          id: "test-waba",
+          changes: [
+            {
+              field: "messages",
+              value: {
+                messaging_product: "whatsapp",
+                metadata: { phone_number_id: phoneNumberId },
+                statuses: [
+                  {
+                    id: delivery?.providerId,
+                    status: "delivered",
+                    timestamp: "1700000000",
+                    recipient_id: waId,
+                  },
+                  {
+                    id: delivery?.providerId,
+                    status: "read",
+                    timestamp: "1600000000",
+                    recipient_id: waId,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    expect((await POST(post(statusPayload))).status).toBe(200);
 
-    expect(firstResponse.status).toBe(200);
-    expect(secondResponse.status).toBe(200);
-    expect(await messageCount()).toBe(before + 2);
-    expect(await conversationCount()).toBe(1);
-    const conversation = await conversationForWa("16505551234");
-    expect(conversation?.generatingAt).toBeNull();
+    const [updated] = await deliveryRows();
+    expect(updated.state).toBe("delivered");
+  });
+
+  it("does not double-write on a replayed wamid after processing", async () => {
+    const before = await messageRows();
+    await POST(post(inboundPayload()));
+    expect(await jobCount()).toBe(1);
+    await runWhatsAppWorkerOnce(randomUUID());
+    const after = await messageRows();
+    expect(after.length).toBe(before.length);
+  });
+});
+
+describe("conversation invariants survive enqueue-then-ack", () => {
+  function inboundFor(wa: string, wamid: string, body?: string): MetaPayload {
+    const payload = inboundPayload();
+    payload.entry[0].changes[0].value.contacts[0].wa_id = wa;
+    payload.entry[0].changes[0].value.messages[0].from = wa;
+    payload.entry[0].changes[0].value.messages[0].id = wamid;
+    if (body !== undefined) {
+      payload.entry[0].changes[0].value.messages[0].text.body = body;
+    }
+    return payload;
+  }
+
+  async function conversationMessages(conversationId: string) {
+    return db
+      .select({ id: messages.id, role: messages.role })
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId));
+  }
+
+  it("routes a second distinct message from the same wa_id into one conversation", async () => {
+    const id = "16505551111";
+    expect(
+      (await POST(post(inboundFor(id, `wamid.inv-a.${suffix}`, "Hello"))))
+        .status,
+    ).toBe(200);
+    expect(
+      (await POST(post(inboundFor(id, `wamid.inv-b.${suffix}`, "What times?"))))
+        .status,
+    ).toBe(200);
+
+    await runWhatsAppWorkerOnce(randomUUID());
+
+    const conversation = requireRow(
+      await conversationForWa(id),
+      "conversation",
+    );
+    const rows = await conversationMessages(conversation.id);
+    expect(rows.filter((row) => row.role === "user")).toHaveLength(2);
+    expect(rows.filter((row) => row.role === "assistant")).toHaveLength(2);
+    expect(conversation.generatingAt).toBeNull();
+  });
+
+  it("reschedules while generatingAt is held, then completes on release", async () => {
+    const id = "16505552222";
+    expect(
+      (await POST(post(inboundFor(id, `wamid.lock-a.${suffix}`)))).status,
+    ).toBe(200);
+    await runWhatsAppWorkerOnce(randomUUID());
+
+    const conversation = requireRow(
+      await conversationForWa(id),
+      "conversation",
+    );
+    const before = await conversationMessages(conversation.id);
+
+    // Simulate a concurrent worker mid-flight by holding the single-flight lock.
+    await db
+      .update(conversations)
+      .set({ generatingAt: new Date(), updatedAt: new Date() })
+      .where(eq(conversations.id, conversation.id));
+
+    expect(
+      (await POST(post(inboundFor(id, `wamid.lock-b.${suffix}`)))).status,
+    ).toBe(200);
+    await runWhatsAppWorkerOnce(randomUUID());
+
+    const jobs = await db
+      .select()
+      .from(whatsappJobs)
+      .where(eq(whatsappJobs.phoneNumberId, phoneNumberId));
+    const deferred = requireRow(
+      jobs.find((job) => job.dedupeKey === `wamid.lock-b.${suffix}`),
+      "deferred job",
+    );
+    // Deferred, not failed/dropped, and nothing was double-written.
+    expect(deferred.state).toBe("pending");
+    expect(await conversationMessages(conversation.id)).toHaveLength(
+      before.length,
+    );
+
+    // Release the lock and make the deferred job due again; it then completes.
+    await db
+      .update(conversations)
+      .set({ generatingAt: null, updatedAt: new Date() })
+      .where(eq(conversations.id, conversation.id));
+    await db
+      .update(whatsappJobs)
+      .set({ nextAttemptAt: new Date(Date.now() - 1000) })
+      .where(eq(whatsappJobs.id, deferred.id));
+    await runWhatsAppWorkerOnce(randomUUID());
+
+    const after = await conversationMessages(conversation.id);
+    expect(after).toHaveLength(before.length + 2);
+    expect(
+      requireRow(await conversationForWa(id), "conversation").generatingAt,
+    ).toBeNull();
   });
 
   it("caps a conversation at MAX_CHAT_MESSAGES_PER_CONVERSATION", async () => {
-    const capWaId = "16505559999";
-    const seed = inboundPayload();
-    seed.entry[0].changes[0].value.contacts[0].wa_id = capWaId;
-    seed.entry[0].changes[0].value.messages[0].from = capWaId;
-    seed.entry[0].changes[0].value.messages[0].id = "wamid.cap-seed";
-    expect((await POST(post(seed))).status).toBe(200);
+    const id = "16505553333";
+    expect(
+      (await POST(post(inboundFor(id, `wamid.cap-seed.${suffix}`)))).status,
+    ).toBe(200);
+    await runWhatsAppWorkerOnce(randomUUID());
 
-    const conversation = await conversationForWa(capWaId);
-    expect(conversation).toBeTruthy();
+    const conversation = requireRow(
+      await conversationForWa(id),
+      "conversation",
+    );
+    const existing = await conversationMessages(conversation.id);
+    const fill = MAX_CHAT_MESSAGES_PER_CONVERSATION - existing.length;
 
-    const purgeAt = addDays(new Date(), 30);
-    const fill = MAX_CHAT_MESSAGES_PER_CONVERSATION - 1;
     if (fill > 0) {
       await db.insert(messages).values(
-        Array.from({ length: fill }, (_, i) => ({
-          conversationId: conversation!.id,
-          messageId: `wamid.cap-fill-${i}`,
+        Array.from({ length: fill }, (_, index) => ({
+          conversationId: conversation.id,
+          messageId: `wamid.cap-fill-${index}.${suffix}`,
           role: "user" as const,
-          parts: [{ type: "text", text: `fill ${i}` }],
+          parts: [{ type: "text", text: `fill ${index}` }],
           completion: "complete" as const,
-          purgeAt,
+          purgeAt: addDays(new Date(), 30),
         })),
       );
     }
 
-    const over = inboundPayload();
-    over.entry[0].changes[0].value.contacts[0].wa_id = capWaId;
-    over.entry[0].changes[0].value.messages[0].from = capWaId;
-    over.entry[0].changes[0].value.messages[0].id = "wamid.cap-over";
-    expect((await POST(post(over))).status).toBe(200);
+    expect(
+      (await POST(post(inboundFor(id, `wamid.cap-over.${suffix}`)))).status,
+    ).toBe(200);
+    await runWhatsAppWorkerOnce(randomUUID());
 
-    const rows = await db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(eq(messages.conversationId, conversation!.id));
-    expect(rows.length).toBe(MAX_CHAT_MESSAGES_PER_CONVERSATION);
+    expect(await conversationMessages(conversation.id)).toHaveLength(
+      MAX_CHAT_MESSAGES_PER_CONVERSATION,
+    );
   });
 });
 

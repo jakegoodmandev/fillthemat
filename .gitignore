@@ -38,6 +38,9 @@ yarn-error.log*
 # worktrees
 .worktrees
 
+# director orchestration artifacts
+.director/
+
 # vercel
 .vercel
 

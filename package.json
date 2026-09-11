@@ -23,7 +23,8 @@
     "supabase:start": "bunx supabase start",
     "supabase:stop": "bunx supabase stop",
     "skills:install": "skills experimental_install -y",
-    "skills:update": "skills update -p -y"
+    "skills:update": "skills update -p -y",
+    "whatsapp:worker": "bun scripts/whatsapp-worker.ts --once"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.87",

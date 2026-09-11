@@ -1,75 +1,32 @@
-import { type UIMessage, validateUIMessages } from "ai";
+import type { UIMessage } from "ai";
 import { addDays } from "date-fns";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { conversations, messages, schools } from "@/db/schema";
 import { hashToken, hashWaId, randomToken } from "@/lib/crypto";
 import { TRANSCRIPT_RETENTION_DAYS } from "@/lib/schedule/constants";
-import { MAX_CHAT_MESSAGES_PER_CONVERSATION } from "@/lib/security/limits";
-import { loadValidatedConversationMessages } from "./messages";
 import type { InboundWhatsAppMessage } from "./parse";
 
-export type PersistInboundResult =
+export type ResolveInboundResult =
   | {
-      persisted: false;
-      reason:
-        | "unknown_phone_number"
-        | "empty_text"
-        | "limit"
-        | "generation_in_progress";
+      resolved: true;
+      schoolId: string;
+      conversationId: string;
+      purgeAt: Date;
     }
-  | { persisted: boolean; duplicate: boolean; conversationId: string };
+  | { resolved: false; reason: "unknown_phone_number" | "empty_text" };
 
 /**
- * Single-flight claim, mirroring `chat/route.ts`. Only one inbound may hold the
- * `generating_at` lock per conversation at a time. A bounded retry serializes
- * concurrent in-flight webhooks against the same conversation instead of
- * dropping the loser (Phase 4 replaces this inline path with enqueue-then-ack).
+ * Resolve the school from `metadata.phone_number_id` and find/create the
+ * WhatsApp conversation keyed `(school_id, wa_id_hash)`. Dedupe is at the job
+ * layer (`whatsapp_jobs.dedupe_key` = wamid); this only resolves identity and
+ * slides the conversation expiry forward while the thread is active.
  */
-async function claimGenerating(
-  conversationId: string,
-  now: Date,
-): Promise<boolean> {
-  const db = getDb();
-  for (let attempt = 0; attempt < 120; attempt++) {
-    const [claimed] = await db
-      .update(conversations)
-      .set({ generatingAt: now, updatedAt: now })
-      .where(
-        and(
-          eq(conversations.id, conversationId),
-          isNull(conversations.generatingAt),
-        ),
-      )
-      .returning({ id: conversations.id });
-    if (claimed) return true;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  return false;
-}
-
-async function releaseGenerating(conversationId: string): Promise<void> {
-  const db = getDb();
-  await db
-    .update(conversations)
-    .set({ generatingAt: null, updatedAt: new Date() })
-    .where(eq(conversations.id, conversationId));
-}
-
-/**
- * Resolve the school from `metadata.phone_number_id`, find/create the WhatsApp
- * conversation keyed `(school_id, wa_id_hash)`, and persist the inbound message
- * as UIMessage parts. Dedupe is by `wamid` via the `(conversation_id, message_id)`
- * unique constraint, so a Meta retry produces at most one row.
- *
- * `generating_at` is claimed/released around the load+persist so concurrent
- * inbound on the same conversation is serialized (agent run is Phase 4).
- */
-export async function persistInboundMessage(
+export async function resolveInboundConversation(
   input: InboundWhatsAppMessage,
   now = new Date(),
-): Promise<PersistInboundResult> {
-  if (!input.text) return { persisted: false, reason: "empty_text" };
+): Promise<ResolveInboundResult> {
+  if (!input.text) return { resolved: false, reason: "empty_text" };
 
   const db = getDb();
   const [school] = await db
@@ -77,7 +34,7 @@ export async function persistInboundMessage(
     .from(schools)
     .where(eq(schools.whatsappPhoneNumberId, input.phoneNumberId))
     .limit(1);
-  if (!school) return { persisted: false, reason: "unknown_phone_number" };
+  if (!school) return { resolved: false, reason: "unknown_phone_number" };
 
   const waIdHash = hashWaId(input.waId);
   const purgeAt = addDays(now, TRANSCRIPT_RETENTION_DAYS);
@@ -98,9 +55,8 @@ export async function persistInboundMessage(
       .insert(conversations)
       .values({
         schoolId: school.id,
-        // Web conversations keep `resume_token_hash` as their identity; the
-        // WhatsApp row needs a non-null value to satisfy the column, but it is
-        // never used for lookups — `wa_id_hash` is the key.
+        // Web conversations keep `resume_token_hash` as their identity; this
+        // random value satisfies the column but is never used for lookups.
         resumeTokenHash: hashToken(randomToken()),
         waIdHash,
         expiresAt: purgeAt,
@@ -127,62 +83,119 @@ export async function persistInboundMessage(
   }
   if (!conversation) throw new Error("whatsapp_conversation_resolution_failed");
 
-  // Sliding retention: the conversation row stays alive while the thread is
-  // active; each message still purges individually at its own `purge_at`.
   await db
     .update(conversations)
     .set({ expiresAt: purgeAt, updatedAt: now })
     .where(eq(conversations.id, conversation.id));
 
-  if (!(await claimGenerating(conversation.id, now))) {
-    return { persisted: false, reason: "generation_in_progress" };
-  }
+  return {
+    resolved: true,
+    schoolId: school.id,
+    conversationId: conversation.id,
+    purgeAt,
+  };
+}
 
-  try {
-    const history = await loadValidatedConversationMessages(conversation.id);
+export async function messageExists(
+  conversationId: string,
+  messageId: string,
+): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.messageId, messageId),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
+}
 
-    if (history.some((row) => row.id === input.wamid)) {
-      return {
-        persisted: false,
-        duplicate: true,
-        conversationId: conversation.id,
-      };
-    }
-
-    if (history.length >= MAX_CHAT_MESSAGES_PER_CONVERSATION) {
-      return { persisted: false, reason: "limit" };
-    }
-
-    // Validate the full context that Phase 4 will feed the agent; text parts
-    // pass through untouched, and a corrupt persisted row surfaces here.
-    const inboundUIMessage: UIMessage = {
-      id: input.wamid,
+export async function persistUserMessage({
+  conversationId,
+  messageId,
+  text,
+  purgeAt,
+}: {
+  conversationId: string;
+  messageId: string;
+  text: string;
+  purgeAt: Date;
+}): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .insert(messages)
+    .values({
+      conversationId,
+      messageId,
       role: "user",
-      parts: [{ type: "text", text: input.text }],
-    };
-    await validateUIMessages({ messages: [...history, inboundUIMessage] });
+      parts: [{ type: "text", text }],
+      completion: "complete",
+      purgeAt,
+    })
+    .onConflictDoNothing({
+      target: [messages.conversationId, messages.messageId],
+    })
+    .returning({ id: messages.id });
+  return Boolean(row);
+}
 
-    const [message] = await db
-      .insert(messages)
-      .values({
-        conversationId: conversation.id,
-        messageId: input.wamid,
-        role: "user",
-        parts: [{ type: "text", text: input.text }],
-        completion: "complete",
-        purgeAt,
-      })
-      .onConflictDoNothing({
-        target: [messages.conversationId, messages.messageId],
-      })
-      .returning();
+export async function persistAssistantMessage({
+  conversationId,
+  messageId,
+  parts,
+  purgeAt,
+}: {
+  conversationId: string;
+  messageId: string;
+  parts: UIMessage["parts"];
+  purgeAt: Date;
+}): Promise<void> {
+  const db = getDb();
+  await db
+    .insert(messages)
+    .values({
+      conversationId,
+      messageId,
+      role: "assistant",
+      parts,
+      completion: "complete",
+      purgeAt,
+    })
+    .onConflictDoNothing({
+      target: [messages.conversationId, messages.messageId],
+    });
+}
 
-    return {
-      persisted: Boolean(message),
-      duplicate: !message,
-      conversationId: conversation.id,
-    };
-  } finally {
-    await releaseGenerating(conversation.id);
+export async function claimGenerating(
+  conversationId: string,
+  now: Date,
+): Promise<boolean> {
+  const db = getDb();
+  for (let attempt = 0; attempt < 120; attempt++) {
+    const [claimed] = await db
+      .update(conversations)
+      .set({ generatingAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(conversations.id, conversationId),
+          isNull(conversations.generatingAt),
+        ),
+      )
+      .returning({ id: conversations.id });
+    if (claimed) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
+  return false;
+}
+
+export async function releaseGenerating(conversationId: string): Promise<void> {
+  const db = getDb();
+  await db
+    .update(conversations)
+    .set({ generatingAt: null, updatedAt: new Date() })
+    .where(eq(conversations.id, conversationId));
 }
