@@ -1,3 +1,5 @@
+> Archived. Not current instructions. See docs/README.md.
+
 # Dashboard makeover — director handoff
 
 ## Mission

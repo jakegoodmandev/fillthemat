@@ -1,3 +1,5 @@
+> Archived. Not current instructions. See docs/README.md.
+
 # End-to-End Browser Testing Plan
 
 **Project:** fillthemat  

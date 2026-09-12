@@ -1,3 +1,5 @@
+> Archived. Not current instructions. See docs/README.md.
+
 # Settings UX research
 
 ## Recommendation
@@ -18,7 +20,7 @@ Sources:
 - [Provide Fin AI Agent with specific guidance](https://www.intercom.com/help/en/articles/10210126-provide-fin-ai-agent-with-specific-guidance)
 - [Use Fin previews](https://www.intercom.com/help/en/articles/12599471-use-fin-previews)
 
-![Intercom guidance editor with starter templates and separate save, enable, and preview controls](references/settings/intercom-guidance.png)
+![Intercom guidance editor with starter templates and separate save, enable, and preview controls](../references/settings/intercom-guidance.png)
 
 *Source: Intercom’s guidance article linked above.*
 
@@ -50,7 +52,7 @@ Sources:
 - [Playground](https://chatbase.co/docs/user-guides/chatbot/playground)
 - [Build](https://chatbase.co/docs/user-guides/chatbot/build)
 
-![Chatbase Playground with configuration on the left and a rendered chat experience on the right](references/settings/chatbase-playground.png)
+![Chatbase Playground with configuration on the left and a rendered chat experience on the right](../references/settings/chatbase-playground.png)
 
 *Source: Chatbase’s Playground documentation linked above.*
 
@@ -83,7 +85,7 @@ Sources:
 - [Business pricing](https://help.goodcall.com/en/articles/8007539-your-ai-agent-can-learn-about-your-business-pricing)
 - [Handling customers running late](https://help.goodcall.com/en/articles/8007533-teach-your-ai-agent-to-help-callers-running-late)
 
-![Goodcall pricing editor showing an action, agent wording, follow-up, destination, and preview](references/settings/goodcall-pricing.png)
+![Goodcall pricing editor showing an action, agent wording, follow-up, destination, and preview](../references/settings/goodcall-pricing.png)
 
 *Source: Goodcall’s pricing article linked above; historical UI reference.*
 

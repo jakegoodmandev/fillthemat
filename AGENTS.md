@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Local development
 
-Before running the app, changing env files, Supabase config, auth, or onboarding docs, read **`docs/local-development.md`**. That is the source of truth for the local stack (current workaround and the planned `bun run setup` bootstrap). Do not add a vendored skill for this; keep third-party skills in `skills-lock.json` only.
+Before running the app, changing env files, Supabase config, auth, or onboarding docs, read **`docs/local-development.md`**. That is the source of truth for running the stack (the landed `bun run setup` bootstrap, seed credentials, degradable vendors, and the worktree port contract). Do not add a vendored skill for this; keep third-party skills in `skills-lock.json` only.
 
 ### Worktree port contract
 

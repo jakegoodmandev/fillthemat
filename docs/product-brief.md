@@ -1,6 +1,6 @@
 # Fillthemat product brief
 
-Founder prompt captured for V1 planning. This is product intent, not the implementation spec. Implementation decisions live in `docs/v1-plan.md`.
+Founder prompt captured for V1 planning. This is product intent, not the implementation spec. Implementation decisions live in `docs/archive/v1-architecture.md` (historical) and `docs/known-gaps.md` (remaining).
 
 ## What it is
 

@@ -1,18 +1,13 @@
 # WhatsApp Channel — Decision-Ready Phased Plan
 
-Status: **spike-and-plan pass complete**. Synthesized by the Director from three parallel spike reports
-(`docs/spike-{1,3}-notes.md` from worker 1 (deepseek-v4-flash), `docs/spike-{2,5}-notes.md` from worker 2
-(minimax-m2.5), `docs/spike-4-notes.md` from worker 3 (gemini-3.5-flash), plus a direct spot-check of the
-cited line numbers. No production code was written in this pass.
+Status: **Phases 1–5 implemented.** Remaining work is **Phase 6** (human Meta production rollout).
+Do not re-run the spike or Phase 5.
 
-Scope: move the customer-facing AI chat (today at `/s/<slug>` on the web) onto the WhatsApp Cloud API so a
-prospect can qualify, learn about trial offerings, see open times, and create a booking or leave a lead —
-all inside WhatsApp.
+This file is the binding channel spec: §4 (A–L) plus the phase log below. Worker wake-up is `after()`
+in the inbound webhook plus a Hobby-safe daily cron — see `docs/decisions/whatsapp-cron-after.md`.
 
-**All open decisions are now RESOLVED.** The operator reviewed §4 on 2026-09-11 and confirmed every
-recommended default. §4 is the binding decisions record (A–L); the inline per-phase decision blocks (
-D1–D11) restate the same resolutions where they bite. The plan is fully actionable by an implementer
-without further questions.
+It began as a spike-and-plan (no code in that pass). Implementation landed in later PRs (Phases 1–4 on
+`main`, Phase 5 assumed landed). Phase sections 1–5 are historical how-we-got-here, not open tasks.
 
 ---
 
@@ -40,7 +35,7 @@ without further questions.
 | Conversation identity | `resumeTokenHash` = SHA-256 of a per-slug **localStorage** token, **globally unique** (`schema.ts:349,356`), first-school-wins + 403 on cross-school reuse (`chat/route.ts:87-99`) | Key by **(school_id, wa_id)** (Meta-verified phone). New nullable/wa-specific key on `conversations`; `resumeTokenHash` stays for web. |
 | Trust model | Turnstile + email/recipient quotas + client-minted idempotency UUID | Meta webhook signature (`X-Hub-Signature-256` over raw body with app secret), wa_id identity, wamid-based dedupe, per-wa_id quotas. |
 | Booking/lead entry | Forms (`POST /api/bookings`, `/api/leads`) after agent `prepare_booking` | Agent collects; **platform writes** via `bookSlot` after explicit in-chat confirmation (product decision A). |
-| History | GET `/api/chat` exists but client discards it (known gap, `docs/v1-plan-remaining.md:23`) | Server drives history directly from DB — no client gap. |
+| History | GET `/api/chat` exists but client discards it (known gap, `docs/known-gaps.md`) | Server drives history directly from DB — no client gap. |
 
 ### 1.3 Data flow
 
@@ -151,7 +146,7 @@ That is the acceptance bar for every phase below except the final production-rol
 ## 3. Phases
 
 Ordered so the flow is locally runnable/testable as early as possible; each phase is independently
-shippable and adds to the previous. Production phases are Phase 6.
+shippable and adds to the previous. **Phases 1–5 are done.** Only Phase 6 remains.
 
 ### Phase 1 — Schema + config foundation (local: runs green)
 

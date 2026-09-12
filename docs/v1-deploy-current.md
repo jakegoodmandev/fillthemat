@@ -1,6 +1,6 @@
-# Deploy current Fillthemat (`v1` branch)
+# Deploy current Fillthemat (current `main`, founder alpha)
 
-How to put **today’s code** on Vercel. This is not the full pilot launch gate in `docs/v1-plan.md`. It is “founder alpha, hosted”: one operator, real HTTPS, no claim of production-hardening.
+How to put **today’s code** on Vercel. This is not the full pilot launch gate (see `docs/known-gaps.md`). It is “founder alpha, hosted”: one operator, real HTTPS, no claim of production-hardening.
 
 The Vercel project already exists and is linked: `jakegoodmandev-3440s-projects/fillthemat`. Local `.vercel/` should stay uncommitted.
 
@@ -65,6 +65,11 @@ CRON_SECRET=
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 TURNSTILE_SECRET_KEY=
 BOOKING_AGENT_MODEL=
+WHATSAPP_APP_SECRET=
+WHATSAPP_VERIFY_TOKEN=
+WHATSAPP_SYSTEM_USER_TOKEN=
+WHATSAPP_API_VERSION=
+WHATSAPP_GRAPH_BASE=
 ```
 
 Notes:
@@ -73,6 +78,7 @@ Notes:
 - `BOOKING_AGENT_MODEL` is required unless the team has paid Gateway access to `anthropic/claude-sonnet-4.6`. Locally a free-tier-allowed model was needed. Set the same model in Vercel.
 - `DIRECT_URL` is for operator migrate commands, not required on the serverless runtime if you never migrate from the app. Harmless if set.
 - Generate `RESEND_WEBHOOK_SECRET` from the Resend dashboard when you create the webhook, then paste it into Vercel.
+- WhatsApp env vars are **optional until WhatsApp rolls out in production**. Leave them unset: the webhook/worker use dev-stub values only when `NODE_ENV !== "production"`; production fails closed when they are missing once the feature ships. `WHATSAPP_API_VERSION` defaults to `v23.0` and `WHATSAPP_GRAPH_BASE` to `https://graph.facebook.com`; set them only to override. Meta app/use-case setup belongs to the Phase 6 human rollout, not this deploy doc.
 
 Pull is optional; do not overwrite `.env.local` OIDC token carelessly:
 
@@ -90,7 +96,7 @@ bunx vercel env pull
 2. Change production `RESEND_FROM` to that domain.
 3. Create webhook `https://<host>/api/webhooks/resend` for delivered/bounced/complained; set `RESEND_WEBHOOK_SECRET`.
 
-Vercel cron is already in `vercel.ts` (`0 14 * * *` UTC → `/api/cron/maintenance`). Confirm it appears on the project after the first production deploy. Hobby/cron timing is daily; that matches founder-alpha “check the run daily,” not the pilot 5-minute schedule.
+Vercel cron is already in `vercel.ts` (`0 14 * * *` UTC → `/api/cron/maintenance`). A second Hobby-safe cron (`0 5 * * *` → `/api/cron/whatsapp`) is the WhatsApp delivery sweeper; the fast path is `after()` in the inbound webhook. Both run daily because Hobby cron is daily-only. Confirm they appear on the project after the first production deploy. Hobby/cron timing matches founder-alpha “check the run daily,” not the pilot 5-minute schedule.
 
 ## 4. Turnstile
 

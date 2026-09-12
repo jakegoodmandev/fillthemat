@@ -1,3 +1,5 @@
+> Archived. Not current instructions. See docs/README.md. Phase 5 is implemented; remaining WhatsApp work is Phase 6 in `docs/whatsapp-plan.md`. Cron decision: `docs/decisions/whatsapp-cron-after.md`.
+
 # Phase 5 kickoff prompt — WhatsApp-sourced leads & bookings
 
 Ready-to-paste prompt for a fresh Director session. Phases 1–4 are implemented and merged; this is
@@ -9,7 +11,7 @@ IMPLEMENTATION TASK — WhatsApp Cloud API channel, Phase 5 (fillthemat)
 
 You are one implementation sub-agent. The plan is merged to main as `docs/whatsapp-plan.md`; the
 architecture-spike decision (after() fast path + typing indicator + Hobby-safe daily cron) is
-recorded in `docs/spike-supabase-cron.md`. **Phases 1–4 are ALREADY IMPLEMENTED AND MERGED:**
+recorded in `docs/decisions/whatsapp-cron-after.md`. **Phases 1–4 are ALREADY IMPLEMENTED AND MERGED:**
 - Phase 1: `whatsapp_deliveries` table, `contacts.email` nullable (+ unique `(school_id, phone)`),
   `schools.whatsapp_phone_number_id` / `whatsapp_waba_id`, `isLocalWhatsAppNoop()`.
 - Phase 2: `/api/webhooks/whatsapp` (GET verify + POST `X-Hub-Signature-256`), wamid dedupe at the
@@ -86,7 +88,7 @@ Concrete work, in order:
 - `bookSlot`'s web semantics are sacred — your WhatsApp path calls the same transactional core; do not
   change its idempotency, occupancy, or email behavior for existing web flows.
 - The trigger model is already shipped (after() wake + daily cron sweeper + typing indicator,
-  `docs/spike-supabase-cron.md`). Do NOT reintroduce a sub-daily Vercel cron (Hobby rejects it) and do
+  `docs/decisions/whatsapp-cron-after.md`). Do NOT reintroduce a sub-daily Vercel cron (Hobby rejects it) and do
   not re-architect the trigger without a product decision.
 
 == WORKTREE CONTRACT ==
