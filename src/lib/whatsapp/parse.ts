@@ -3,6 +3,8 @@ export type InboundWhatsAppMessage = {
   wamid: string;
   waId: string;
   text: string | null;
+  /** The prospect's WhatsApp profile name, when Meta includes it. */
+  profileName: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -50,14 +52,32 @@ export function parseInboundWhatsAppMessages(
           : "";
 
       let contactWaId: string | null = null;
+      let profileName: string | null = null;
       const contacts = value.contacts;
       if (Array.isArray(contacts)) {
         for (const contact of contacts) {
-          if (isRecord(contact) && typeof contact.wa_id === "string") {
+          if (
+            isRecord(contact) &&
+            typeof contact.wa_id === "string" &&
+            contactWaId === null
+          ) {
             contactWaId = contact.wa_id;
-            break;
           }
+          if (
+            isRecord(contact) &&
+            profileName === null &&
+            isRecord(contact.profile) &&
+            typeof contact.profile.name === "string"
+          ) {
+            profileName = contact.profile.name;
+          }
+          if (contactWaId !== null && profileName !== null) break;
         }
+      }
+      if (profileName == null || profileName.trim() === "") {
+        profileName = null;
+      } else {
+        profileName = profileName.trim();
       }
 
       if (!Array.isArray(value.messages)) continue;
@@ -74,6 +94,7 @@ export function parseInboundWhatsAppMessages(
           wamid,
           waId,
           text: textFromMessage(message),
+          profileName,
         });
       }
     }

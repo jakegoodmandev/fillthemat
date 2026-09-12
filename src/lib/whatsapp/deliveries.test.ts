@@ -56,4 +56,41 @@ describe("planWhatsAppDelivery", () => {
     );
     expect(plan.type).toBe("template");
   });
+
+  it("plans an interactive message while the window is open", () => {
+    const plan = planWhatsAppDelivery(
+      {
+        templateName: null,
+        templateParams: null,
+        windowExpiresAt: addHours(now, 1),
+        interactiveButtons: [
+          { id: "confirm_booking:abc", title: "Confirm booking" },
+          { id: "choose_another_time", title: "Choose another time" },
+        ],
+        body: "Ready to book?",
+      },
+      now,
+    );
+    expect(plan.type).toBe("interactive");
+    if (plan.type === "interactive") {
+      expect(plan.body).toBe("Ready to book?");
+      expect(plan.buttons).toHaveLength(2);
+    }
+  });
+
+  it("fails closed for an interactive message when the window is closed", () => {
+    const plan = planWhatsAppDelivery(
+      {
+        templateName: null,
+        templateParams: null,
+        windowExpiresAt: subHours(now, 1),
+        interactiveButtons: [
+          { id: "confirm_booking:abc", title: "Confirm booking" },
+        ],
+        body: "Ready to book?",
+      },
+      now,
+    );
+    expect(plan.type).toBe("window_closed");
+  });
 });

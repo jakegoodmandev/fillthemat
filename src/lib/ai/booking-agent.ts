@@ -112,12 +112,19 @@ export function createBookingAgent({
       }),
       prepare_booking: tool({
         description:
-          "Revalidate an offering and slot and return data for the booking form. This does not create a booking.",
+          "Revalidate an offering and slot and return data for the booking confirmation flow. This does not create a booking. Collect the participant name and age first so the platform can book without asking again.",
         inputSchema: z.object({
           offeringId: z.string().uuid(),
           slotId: z.string().min(1),
+          participantName: z.string().trim().min(1).max(80).optional(),
+          participantAge: z.number().int().min(0).max(99).optional(),
         }),
-        execute: async ({ offeringId, slotId }) => {
+        execute: async ({
+          offeringId,
+          slotId,
+          participantName,
+          participantAge,
+        }) => {
           const offering = offerings.find(
             (row) => row.id === offeringId && row.active,
           );
@@ -146,8 +153,27 @@ export function createBookingAgent({
               localTimeLabel: slot.localTimeLabel,
               timezone: slot.timezone,
             },
+            participantName: participantName ?? null,
+            participantAge: participantAge ?? null,
           };
         },
+      }),
+      capture_lead: tool({
+        description:
+          "Record a prospect's request to be contacted when they cannot or do not want to book a trial now (no matching offering, no workable slot, or an explicit 'contact me'). This does NOT create a lead; the platform writes it after the prospect consents. Collect name, age, and need first.",
+        inputSchema: z.object({
+          participantName: z.string().trim().min(1).max(80).optional(),
+          participantAge: z.number().int().min(0).max(99).optional(),
+          offeringId: z.string().uuid().optional(),
+          statedNeed: z.string().trim().max(1000).optional(),
+        }),
+        execute: async (input) => ({
+          ok: true as const,
+          participantName: input.participantName ?? null,
+          participantAge: input.participantAge ?? null,
+          offeringId: input.offeringId ?? null,
+          statedNeed: input.statedNeed ?? null,
+        }),
       }),
     },
   });

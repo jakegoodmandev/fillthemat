@@ -1,15 +1,5 @@
-import { eq } from "drizzle-orm";
-import { getDb } from "@/db";
-import {
-  contacts,
-  emailDeliveries,
-  funnelEvents,
-  landingSessions,
-  leads,
-} from "@/db/schema";
-import { hashToken, normalizeEmail } from "@/lib/crypto";
 import { attemptPendingForLead } from "@/lib/email/deliveries";
-import { FUNNEL_EVENTS } from "@/lib/funnel";
+import { createLead } from "@/lib/leads/create-lead";
 import { getRequestIp } from "@/lib/request";
 import { getPublicSchoolBySlug } from "@/lib/schools/public";
 import {
@@ -39,80 +29,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "rate_limited" }, { status: 429 });
   }
 
-  const db = getDb();
-  const email = normalizeEmail(body.contact.email);
-
-  const lead = await db.transaction(async (tx) => {
-    const [contact] = await tx
-      .insert(contacts)
-      .values({
-        schoolId: school.id,
-        email,
-        name: body.contact.name,
-        phone: body.contact.phone,
-      })
-      .onConflictDoUpdate({
-        target: [contacts.schoolId, contacts.email],
-        set: {
-          name: body.contact.name,
-          phone: body.contact.phone,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    if (!contact) throw new Error("contact_failed");
-
-    let landingSessionId: string | undefined;
-    if (body.landingSessionToken) {
-      const [session] = await tx
-        .select()
-        .from(landingSessions)
-        .where(
-          eq(
-            landingSessions.sessionKeyHash,
-            hashToken(body.landingSessionToken),
-          ),
-        )
-        .limit(1);
-      if (session?.schoolId === school.id) landingSessionId = session.id;
-    }
-    if (!landingSessionId) {
-      throw Object.assign(new Error("session_required"), {
-        code: "session_required",
-      });
-    }
-
-    const [row] = await tx
-      .insert(leads)
-      .values({
-        schoolId: school.id,
-        landingSessionId,
-        contactId: contact.id,
-        participantName: body.participantName,
-        participantAge: body.participantAge,
-        trialOfferingId: body.offeringId,
-        statedNeed: body.statedNeed,
-        status: "open",
-      })
-      .returning();
-    if (!row) throw new Error("lead_failed");
-
-    await tx.insert(emailDeliveries).values({
-      schoolId: school.id,
-      leadId: row.id,
-      kind: "owner_lead",
-      recipient: school.notificationEmail,
-      providerIdempotencyKey: `owner-lead/${row.id}`,
-      state: "pending",
-    });
-    await tx.insert(funnelEvents).values({
-      schoolId: school.id,
-      landingSessionId,
-      leadId: row.id,
-      eventType: FUNNEL_EVENTS.leadCaptured,
-      metadata: { hasOffering: Boolean(body.offeringId) },
-    });
-    return row;
+  const lead = await createLead({
+    school,
+    contact: body.contact,
+    source: { channel: "web", landingSessionToken: body.landingSessionToken },
+    participantName: body.participantName,
+    participantAge: body.participantAge,
+    offeringId: body.offeringId,
+    statedNeed: body.statedNeed,
   });
 
   await attemptPendingForLead(lead.id);
