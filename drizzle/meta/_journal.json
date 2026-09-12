@@ -43,6 +43,13 @@
       "when": 1789151135828,
       "tag": "0005_groovy_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789222334625,
+      "tag": "0006_typical_greymalkin",
+      "breakpoints": true
     }
   ]
 }

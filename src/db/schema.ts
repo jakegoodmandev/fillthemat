@@ -55,6 +55,11 @@ export const whatsappJobStateEnum = appSchema.enum("whatsapp_job_state", [
   "failed",
 ]);
 
+export const whatsappBookingIntentStateEnum = appSchema.enum(
+  "whatsapp_booking_intent_state",
+  ["pending", "confirmed", "expired", "superseded"],
+);
+
 export const messageCompletionEnum = appSchema.enum("message_completion", [
   "complete",
   "streaming",
@@ -480,7 +485,7 @@ export const bookings = appSchema.table(
     endAt: timestamp("end_at", { withTimezone: true }).notNull(),
     locationSnapshot: text("location_snapshot"),
     instructionsSnapshot: text("instructions_snapshot"),
-    contactEmailSnapshot: text("contact_email_snapshot").notNull(),
+    contactEmailSnapshot: text("contact_email_snapshot"),
     contactNameSnapshot: text("contact_name_snapshot").notNull(),
     contactPhoneSnapshot: text("contact_phone_snapshot").notNull(),
     icsUid: text("ics_uid").notNull(),
@@ -600,6 +605,10 @@ export const whatsappDeliveries = appSchema.table(
     templateName: text("template_name"),
     templateParams: jsonb("template_params").$type<unknown>(),
     body: text("body"),
+    interactiveButtons: jsonb("interactive_buttons").$type<Array<{
+      id: string;
+      title: string;
+    }> | null>(),
     windowExpiresAt: timestamp("window_expires_at", { withTimezone: true }),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
       .notNull()
@@ -662,6 +671,47 @@ export const whatsappJobs = appSchema.table(
   ],
 );
 
+export const whatsappBookingIntents = appSchema.table(
+  "whatsapp_booking_intents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    schoolId: uuid("school_id").notNull(),
+    conversationId: uuid("conversation_id").notNull(),
+    offeringId: uuid("offering_id").notNull(),
+    slotId: text("slot_id").notNull(),
+    participantName: text("participant_name"),
+    participantAge: integer("participant_age"),
+    state: whatsappBookingIntentStateEnum("state").notNull().default("pending"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    unique("whatsapp_booking_intents_school_id_id").on(t.schoolId, t.id),
+    uniqueIndex("whatsapp_booking_intents_active_pending")
+      .on(t.conversationId)
+      .where(sql`${t.state} = 'pending'`),
+    foreignKey({
+      columns: [t.schoolId],
+      foreignColumns: [schools.id],
+      name: "whatsapp_booking_intents_school_id_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.schoolId, t.conversationId],
+      foreignColumns: [conversations.schoolId, conversations.id],
+      name: "whatsapp_booking_intents_conversation_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.schoolId, t.offeringId],
+      foreignColumns: [trialOfferings.schoolId, trialOfferings.id],
+      name: "whatsapp_booking_intents_offering_fk",
+    }).onDelete("cascade"),
+    check(
+      "whatsapp_booking_intents_age",
+      sql`${t.participantAge} IS NULL OR ${t.participantAge} BETWEEN 0 AND 99`,
+    ),
+  ],
+);
+
 export const funnelEvents = appSchema.table(
   "funnel_events",
   {
@@ -717,5 +767,6 @@ export type Booking = typeof bookings.$inferSelect;
 export type EmailDelivery = typeof emailDeliveries.$inferSelect;
 export type WhatsAppDelivery = typeof whatsappDeliveries.$inferSelect;
 export type WhatsAppJob = typeof whatsappJobs.$inferSelect;
+export type WhatsAppBookingIntent = typeof whatsappBookingIntents.$inferSelect;
 export type FunnelEvent = typeof funnelEvents.$inferSelect;
 export type CronRun = typeof cronRuns.$inferSelect;
