@@ -1,7 +1,11 @@
 import { and, eq, inArray, lt, lte, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { schools, whatsappDeliveries } from "@/db/schema";
-import { sendWhatsAppTemplate, sendWhatsAppText } from "./client";
+import {
+  sendWhatsAppInteractive,
+  sendWhatsAppTemplate,
+  sendWhatsAppText,
+} from "./client";
 import type { InboundWhatsAppStatus } from "./status";
 import { WHATSAPP_TEMPLATE_LANGUAGE } from "./templates";
 
@@ -18,20 +22,28 @@ export type WhatsappDeliveryPlan =
       languageCode: string;
       params: unknown[];
     }
+  | {
+      type: "interactive";
+      body: string;
+      buttons: Array<{ id: string; title: string }>;
+    }
   | { type: "window_closed" };
 
 /**
  * Decide how a delivery should be sent: an explicit template always goes as a
- * template; otherwise free-form text is allowed only while the 24h
- * customer-service window is open. Closed-window free-form replies have no
- * Meta-approved template equivalent in v1, so they fail closed instead of
- * sending an unapproved out-of-window message.
+ * template; then an interactive message (reply buttons); otherwise free-form
+ * text is allowed only while the 24h customer-service window is open.
+ * Closed-window free-form/interactive replies have no Meta-approved template
+ * equivalent in v1, so they fail closed instead of sending an out-of-window
+ * message.
  */
 export function planWhatsAppDelivery(
   delivery: {
     templateName: string | null;
     templateParams: unknown;
     windowExpiresAt: Date | null;
+    interactiveButtons?: Array<{ id: string; title: string }> | null;
+    body?: string | null;
   },
   now = new Date(),
 ): WhatsappDeliveryPlan {
@@ -45,13 +57,24 @@ export function planWhatsAppDelivery(
         : [],
     };
   }
-  if (
-    delivery.windowExpiresAt &&
-    delivery.windowExpiresAt.getTime() > now.getTime()
-  ) {
+  if (delivery.interactiveButtons && delivery.interactiveButtons.length > 0) {
+    if (!windowOpen(delivery.windowExpiresAt, now)) {
+      return { type: "window_closed" };
+    }
+    return {
+      type: "interactive",
+      body: (delivery.body ?? "").trim(),
+      buttons: delivery.interactiveButtons,
+    };
+  }
+  if (windowOpen(delivery.windowExpiresAt, now)) {
     return { type: "text" };
   }
   return { type: "window_closed" };
+}
+
+function windowOpen(windowExpiresAt: Date | null, now: Date): boolean {
+  return Boolean(windowExpiresAt && windowExpiresAt.getTime() > now.getTime());
 }
 
 export type EnqueueWhatsAppDelivery = {
@@ -62,6 +85,7 @@ export type EnqueueWhatsAppDelivery = {
   templateName?: string | null;
   templateParams?: unknown;
   body?: string | null;
+  interactiveButtons?: Array<{ id: string; title: string }> | null;
   windowExpiresAt?: Date | null;
   bookingId?: string | null;
   leadId?: string | null;
@@ -82,6 +106,7 @@ export async function enqueueWhatsAppDelivery(
       templateParams:
         input.templateParams === undefined ? null : input.templateParams,
       body: input.body ?? null,
+      interactiveButtons: input.interactiveButtons ?? null,
       windowExpiresAt: input.windowExpiresAt ?? null,
       bookingId: input.bookingId ?? null,
       leadId: input.leadId ?? null,
@@ -169,6 +194,8 @@ export async function sendWhatsAppDelivery(
     templateName: delivery.templateName,
     templateParams: delivery.templateParams,
     windowExpiresAt: delivery.windowExpiresAt,
+    interactiveButtons: delivery.interactiveButtons,
+    body: delivery.body,
   });
   if (plan.type === "window_closed") {
     await db
@@ -194,11 +221,18 @@ export async function sendWhatsAppDelivery(
             languageCode: plan.languageCode,
             params: plan.params,
           })
-        : await sendWhatsAppText({
-            phoneNumberId: delivery.phoneNumberId,
-            to: delivery.recipientWaId,
-            text: delivery.body ?? "",
-          });
+        : plan.type === "interactive"
+          ? await sendWhatsAppInteractive({
+              phoneNumberId: delivery.phoneNumberId,
+              to: delivery.recipientWaId,
+              body: plan.body,
+              buttons: plan.buttons,
+            })
+          : await sendWhatsAppText({
+              phoneNumberId: delivery.phoneNumberId,
+              to: delivery.recipientWaId,
+              text: delivery.body ?? "",
+            });
 
     if (!outcome.ok) {
       const lastError = `${

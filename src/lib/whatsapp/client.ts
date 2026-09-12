@@ -134,6 +134,12 @@ export function sendWhatsAppTemplate({
   });
 }
 
+// Interactive message limits (verified against Meta's Cloud API docs): body
+// text ≤ 1024 chars, button title ≤ 20 chars. Truncate defensively so a long
+// agent reply can never produce a malformed Graph request.
+export const WHATSAPP_INTERACTIVE_BODY_CHAR_LIMIT = 1024;
+export const WHATSAPP_INTERACTIVE_TITLE_CHAR_LIMIT = 20;
+
 export function sendWhatsAppInteractive({
   phoneNumberId,
   to,
@@ -152,11 +158,14 @@ export function sendWhatsAppInteractive({
     type: "interactive",
     interactive: {
       type: "button",
-      body: { text: body },
+      body: { text: body.slice(0, WHATSAPP_INTERACTIVE_BODY_CHAR_LIMIT) },
       action: {
         buttons: buttons.map((button) => ({
           type: "reply",
-          reply: { id: button.id, title: button.title },
+          reply: {
+            id: button.id.slice(0, 256),
+            title: button.title.slice(0, WHATSAPP_INTERACTIVE_TITLE_CHAR_LIMIT),
+          },
         })),
       },
     },
