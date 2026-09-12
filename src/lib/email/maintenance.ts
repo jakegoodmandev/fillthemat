@@ -30,6 +30,9 @@ export async function createDueReminderDeliveries(now = new Date()) {
     ) {
       continue;
     }
+    // WhatsApp no-email bookings have no email reminder address; skip them
+    // (their reminder medium is the WhatsApp template, a Phase 6 rollout step).
+    if (!booking.contactEmailSnapshot) continue;
     const inserted = await db
       .insert(emailDeliveries)
       .values({

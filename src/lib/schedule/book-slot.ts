@@ -26,10 +26,12 @@ export type BookSlotInput = {
   offeringId: string;
   slotId: string;
   idempotencyKey: string;
-  contact: { name: string; email: string; phone: string };
+  contact: { name: string; email: string | null; phone: string };
   participant: { name: string; age: number };
   landingSessionToken?: string;
   conversationResumeToken?: string;
+  /** WhatsApp path: resolve the conversation by id directly (no resume token). */
+  conversationId?: string;
   now?: Date;
 };
 
@@ -81,7 +83,11 @@ export async function bookSlot(input: BookSlotInput): Promise<BookSlotResult> {
 
   const now = input.now ?? new Date();
   const db = getDb();
-  const email = normalizeEmail(input.contact.email);
+  // WhatsApp no-email contacts pass `null` through (decision B / D8). Web always
+  // has an email, so the normalize path is unchanged for existing flows.
+  const email = input.contact.email
+    ? normalizeEmail(input.contact.email)
+    : null;
   const participantName = input.participant.name.trim();
   const normalizedName = normalizePersonName(participantName);
 
@@ -164,23 +170,36 @@ export async function bookSlot(input: BookSlotInput): Promise<BookSlotResult> {
         });
       }
 
-      const [contact] = await tx
-        .insert(contacts)
-        .values({
-          schoolId: input.school.id,
-          email,
-          name: input.contact.name.trim(),
-          phone: input.contact.phone.trim(),
-        })
-        .onConflictDoUpdate({
-          target: [contacts.schoolId, contacts.email],
-          set: {
-            name: input.contact.name.trim(),
-            phone: input.contact.phone.trim(),
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
+      const contactValues = {
+        schoolId: input.school.id,
+        email,
+        name: input.contact.name.trim(),
+        phone: input.contact.phone.trim(),
+      };
+      const contactUpdates = {
+        name: input.contact.name.trim(),
+        phone: input.contact.phone.trim(),
+        updatedAt: new Date(),
+      };
+      // Key the upsert on email when present (web semantics unchanged) and on
+      // `(school_id, phone)` when the contact has no email (WhatsApp, decision B).
+      const [contact] = email
+        ? await tx
+            .insert(contacts)
+            .values(contactValues)
+            .onConflictDoUpdate({
+              target: [contacts.schoolId, contacts.email],
+              set: contactUpdates,
+            })
+            .returning()
+        : await tx
+            .insert(contacts)
+            .values(contactValues)
+            .onConflictDoUpdate({
+              target: [contacts.schoolId, contacts.phone],
+              set: contactUpdates,
+            })
+            .returning();
 
       if (!contact) throw new Error("contact_upsert_failed");
 
@@ -277,8 +296,8 @@ export async function bookSlot(input: BookSlotInput): Promise<BookSlotResult> {
         landingSessionId = session?.id;
       }
 
-      let conversationId: string | undefined;
-      if (input.conversationResumeToken) {
+      let conversationId: string | undefined = input.conversationId;
+      if (!conversationId && input.conversationResumeToken) {
         const [conversation] = await tx
           .select()
           .from(conversations)
@@ -293,12 +312,25 @@ export async function bookSlot(input: BookSlotInput): Promise<BookSlotResult> {
           )
           .limit(1);
         conversationId = conversation?.id;
+      }
+      if (conversationId) {
+        const [conversation] = await tx
+          .select()
+          .from(conversations)
+          .where(
+            and(
+              eq(conversations.schoolId, input.school.id),
+              eq(conversations.id, conversationId),
+            ),
+          )
+          .limit(1);
         if (conversation && !conversation.contactId) {
           await tx
             .update(conversations)
             .set({ contactId: contact.id, updatedAt: new Date() })
             .where(eq(conversations.id, conversation.id));
         }
+        conversationId = conversation?.id ?? undefined;
       }
 
       const locationParts = [
@@ -333,7 +365,7 @@ export async function bookSlot(input: BookSlotInput): Promise<BookSlotResult> {
           endAt: slot.endAt,
           locationSnapshot: locationParts.join(", ") || null,
           instructionsSnapshot: instructionParts.join("\n") || null,
-          contactEmailSnapshot: email,
+          contactEmailSnapshot: email ?? null,
           contactNameSnapshot: input.contact.name.trim(),
           contactPhoneSnapshot: input.contact.phone.trim(),
           icsUid: "pending",
@@ -351,15 +383,17 @@ export async function bookSlot(input: BookSlotInput): Promise<BookSlotResult> {
         .returning();
       const saved = updated ?? { ...row, icsUid };
 
-      await tx.insert(emailDeliveries).values([
-        {
-          schoolId: input.school.id,
-          bookingId: saved.id,
-          kind: "prospect_confirmation",
-          recipient: email,
-          providerIdempotencyKey: `booking-confirmation/${saved.id}`,
-          state: "pending",
-        },
+      // Owner notification always goes by email. The prospect confirmation is
+      // emailed only when there is an email; no-email WhatsApp bookings get a
+      // WhatsApp template confirmation enqueued by the caller instead.
+      const deliveryRows: Array<{
+        schoolId: string;
+        bookingId: string;
+        kind: "owner_booking" | "prospect_confirmation";
+        recipient: string;
+        providerIdempotencyKey: string;
+        state: "pending";
+      }> = [
         {
           schoolId: input.school.id,
           bookingId: saved.id,
@@ -368,7 +402,18 @@ export async function bookSlot(input: BookSlotInput): Promise<BookSlotResult> {
           providerIdempotencyKey: `owner-booking/${saved.id}`,
           state: "pending",
         },
-      ]);
+      ];
+      if (email) {
+        deliveryRows.unshift({
+          schoolId: input.school.id,
+          bookingId: saved.id,
+          kind: "prospect_confirmation",
+          recipient: email,
+          providerIdempotencyKey: `booking-confirmation/${saved.id}`,
+          state: "pending",
+        });
+      }
+      await tx.insert(emailDeliveries).values(deliveryRows);
 
       await insertFunnel(tx, {
         schoolId: input.school.id,
@@ -498,24 +543,40 @@ export async function cancelBooking({
       .where(eq(schools.id, schoolId))
       .limit(1);
 
-    await tx.insert(emailDeliveries).values([
-      {
+    // `cancelBooking` stays email/dashboard-only (decision K). A no-email
+    // WhatsApp booking has no prospect email address, so only the owner
+    // cancellation email is enqueued for it.
+    const cancellationRows: Array<{
+      schoolId: string;
+      bookingId: string;
+      kind: "booking_cancellation" | "owner_cancellation";
+      recipient: string;
+      providerIdempotencyKey: string;
+      state: "pending";
+    }> = [];
+    if (booking.contactEmailSnapshot) {
+      cancellationRows.push({
         schoolId,
         bookingId: booking.id,
         kind: "booking_cancellation",
         recipient: booking.contactEmailSnapshot,
         providerIdempotencyKey: `booking-cancellation/${booking.id}/${nextSequence}`,
         state: "pending",
-      },
-      {
+      });
+    }
+    if (school?.notificationEmail) {
+      cancellationRows.push({
         schoolId,
         bookingId: booking.id,
         kind: "owner_cancellation",
-        recipient: school?.notificationEmail ?? booking.contactEmailSnapshot,
+        recipient: school.notificationEmail,
         providerIdempotencyKey: `owner-cancellation/${booking.id}/${nextSequence}`,
         state: "pending",
-      },
-    ]);
+      });
+    }
+    if (cancellationRows.length > 0) {
+      await tx.insert(emailDeliveries).values(cancellationRows);
+    }
 
     await insertFunnel(tx, {
       schoolId,
