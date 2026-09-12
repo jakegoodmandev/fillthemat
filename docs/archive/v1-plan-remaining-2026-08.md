@@ -1,3 +1,5 @@
+> Archived. Not current instructions. See docs/README.md.
+
 # V1 remaining vs `docs/v1-plan.md`
 
 Snapshot of **current `v1` code** versus the complete V1 architecture. This is not a deploy guide (see `docs/v1-deploy-current.md`). Product non-goals in the plan (payments, SMS, GCal OAuth, tenant domains, waivers, RAG, staff roles, ads, post-trial sequences) stay out of scope.

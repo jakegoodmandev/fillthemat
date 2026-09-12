@@ -1,0 +1,35 @@
+# Known gaps
+
+Living list of what is still unfinished. Shipped work is deliberately not repeated here; check the tree and `docs/README.md` for what is current. The archived snapshot (`docs/archive/v1-plan-remaining-2026-08.md`) contains the older, longer version, including items that have since shipped.
+
+## Pilot launch gate (hosted)
+
+Isolated hosted Supabase (preview vs production), verified Resend sending domain, Vercel WAF + production Turnstile, Gateway ZDR + spend-ceiling verification, backup/PITR restore drill, and the founder-alpha smoke checklist are still open. See the "Explicitly skip on this deploy" list in `docs/v1-deploy-current.md`.
+
+## Booking quotas and abuse
+
+Per-school and per-IP booking quotas are not stored or enforced. Email/recipient daily caps exist (`src/lib/security/limits.ts`); per-school/IP reservation quotas do not.
+
+## Chat refresh recovery
+
+GET `/api/chat` exists and can return canonical history, but the prospect client fetches and discards the payload — `useChat` starts empty on reload and the transcript is not hydrated into the UI.
+
+## Privacy-safe chat telemetry
+
+No telemetry table exists in the `app` schema. Model, time-to-first-token, usage, step count, finish/abort, and tool name/result code are not persisted for privacy-safe analytics.
+
+## Integration test coverage
+
+Integration tests exist and run in CI (`bun run test:integration`, `vitest.integration.config.ts`) for: settings offer/FAQ mutations, overview metrics, and the WhatsApp webhook/worker flow. Still missing: the booking write path (concurrent identical bookings, idempotency replay, capacity floor, transaction rollback), the email delivery state machine, and maintenance-cron overlapping-claim behavior.
+
+## Settings Release B
+
+Safe class-time management (reopen / guided replacement for windows with future bookings) is still open. Spec and acceptance live in `docs/settings-overview-ux-plan.md`; current-state notes in `docs/settings-ux-first-pass.md`.
+
+## WhatsApp
+
+Phases 1–4 are merged; Phase 5 is in flight in another worktree; Phase 6 is the human Meta production rollout. See the frozen `docs/whatsapp-plan.md` and `docs/whatsapp-phase5-kickoff.md`.
+
+## Not gaps (already shipped)
+
+shadcn/Radix UI, cancel-booking AlertDialog, Playwright beyond a smoke test (bookings, settings, overview specs + CI), CI (unit, integration, Playwright), and local email auth are done. Do not re-list them as remaining.

@@ -1,6 +1,6 @@
 # Settings UX — first pass (implementation notes)
 
-Implements the first pass of `docs/settings-ux-research.md`, plus Release A
+Implements the first pass of `docs/archive/settings-ux-research.md`, plus Release A
 of `docs/settings-overview-ux-plan.md` (trial-class/FAQ inline editing and
 overview metrics, shipped in #21).
 

@@ -1,7 +1,7 @@
 # Dashboard design system
 
 Implemented visual language for `/dashboard`. This is the current-state
-reference for owner UI. Planning notes live in `docs/dashboard-makeover-plan.md`
+reference for owner UI. Planning notes live in `docs/archive/dashboard-makeover-plan.md`
 and `docs/settings-ux-first-pass.md` (contracts there still apply; presentation
 follows this file).
 

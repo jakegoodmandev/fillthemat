@@ -14,7 +14,7 @@ Make the owner dashboard feel like a tool the school can maintain, not a one-tim
 3. Make class-time management reversible and safe for existing bookings. **Next.**
 4. Polish secondary conveniences only after B is verified.
 
-This is a follow-up to `docs/dashboard-makeover-plan.md`, not a repeat of its foundation work. Keep the implemented shadcn/Radix, softened-dark, Geist design system. Do not reinstall the kit or redesign the shell.
+This is a follow-up to `docs/archive/dashboard-makeover-plan.md`, not a repeat of its foundation work. Keep the implemented shadcn/Radix, softened-dark, Geist design system. Do not reinstall the kit or redesign the shell.
 
 ## 1. Current-state findings
 

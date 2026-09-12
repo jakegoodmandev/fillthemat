@@ -1,3 +1,5 @@
+> Archived. Not current instructions. See docs/README.md.
+
 # Director kickoff — WhatsApp channel for Fillthemat's AI chat + booking funnel
 
 ## Mission

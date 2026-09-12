@@ -1,3 +1,5 @@
+> Archived. Not current instructions. See docs/README.md.
+
 # Fillthemat V1 architecture
 
 ## Product contract
