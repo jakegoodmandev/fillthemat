@@ -93,7 +93,7 @@ export async function POST(request: Request) {
   // daily cron — the job is already committed/enqueued above, so nothing is lost,
   // only the instant dispatch. Verify by sending one inbound and confirming the
   // reply lands in seconds (not at 05:00). Fallback if it doesn't: Supabase
-  // pg_cron (docs/spike-supabase-cron.md) or a Vercel Pro cron.
+  // pg_cron (docs/decisions/whatsapp-cron-after.md) or a Vercel Pro cron.
   if (messages.length > 0) {
     const kickWorker = () =>
       runWhatsAppWorkerOnce(randomUUID()).catch((error) => {

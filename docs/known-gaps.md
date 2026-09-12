@@ -28,8 +28,8 @@ Safe class-time management (reopen / guided replacement for windows with future 
 
 ## WhatsApp
 
-Phases 1–4 are merged; Phase 5 is in flight in another worktree; Phase 6 is the human Meta production rollout. See the frozen `docs/whatsapp-plan.md` and `docs/whatsapp-phase5-kickoff.md`.
+Phases 1–5 (schema through WhatsApp-sourced leads and bookings) are implemented. Remaining work is Phase 6: human Meta production rollout (app, WABA, tokens, templates, webhook HTTPS, App Review, pilot school). Checklist: `docs/whatsapp-plan.md` § Phase 6. Cron decision: `docs/decisions/whatsapp-cron-after.md`.
 
 ## Not gaps (already shipped)
 
-shadcn/Radix UI, cancel-booking AlertDialog, Playwright beyond a smoke test (bookings, settings, overview specs + CI), CI (unit, integration, Playwright), and local email auth are done. Do not re-list them as remaining.
+shadcn/Radix UI, cancel-booking AlertDialog, Playwright beyond a smoke test (bookings, settings, overview specs + CI), CI (unit, integration, Playwright), local email auth, and WhatsApp Phases 1–5 are done. Do not re-list them as remaining.

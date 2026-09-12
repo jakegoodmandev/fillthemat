@@ -10,15 +10,12 @@ Short guide to what is current versus historical. Treat only the files below as 
 - `product-brief.md` — product intent.
 - `dashboard-design-system.md` — implemented owner-UI visual language.
 - `settings-ux-first-pass.md` — current Settings state after Release A.
-- `settings-overview-ux-plan.md` — spec for Release B (still open).
+- `settings-overview-ux-plan.md` — spec for Settings Release B (still open).
+- `whatsapp-plan.md` — WhatsApp channel spec. Phases 1–5 implemented; Phase 6 (Meta production rollout) remains. §4 is the binding decisions record.
 
-## Frozen (in flight)
+## Decisions
 
-Do not edit; WhatsApp Phase 5 is being implemented elsewhere.
-
-- `whatsapp-plan.md`
-- `whatsapp-phase5-kickoff.md`
-- `spike-supabase-cron.md`
+- `decisions/whatsapp-cron-after.md` — accepted: `after()` + typing indicator + Hobby-safe daily cron. Do not reopen unless production needs sub-daily retries.
 
 ## Archive
 
@@ -31,3 +28,4 @@ Historical plans and prompts. Not current instructions.
 - `archive/settings-ux-research.md` (+ screenshots in `references/settings/`).
 - `archive/e2e-testing-plan.md`
 - `archive/whatsapp-director-kickoff.md`
+- `archive/whatsapp-phase5-kickoff.md`

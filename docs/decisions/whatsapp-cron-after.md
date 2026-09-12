@@ -1,6 +1,6 @@
 # Spike: Supabase-triggered WhatsApp worker vs. `after()` — decision doc
 
-**Status:** recommendation (spike, not merged)
+**Status:** accepted and implemented (`after()` in the WhatsApp webhook + typing indicator + Hobby-safe daily cron `0 5 * * *` on `/api/cron/whatsapp`). Do not reopen unless production needs sub-daily retries.
 **Date:** 2026-09-11
 **Scope:** evaluate replacing the Vercel 1-minute cron that PR #34 adds for the
 WhatsApp outbound worker with (a) a Supabase `pg_cron`/pgmq trigger, or
