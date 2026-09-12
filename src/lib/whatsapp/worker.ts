@@ -4,8 +4,20 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { schools, type WhatsAppJob } from "@/db/schema";
 import { runBookingAgentToCompletion } from "@/lib/ai/run-agent";
+import { attemptPendingForLead } from "@/lib/email/deliveries";
+import { createLead } from "@/lib/leads/create-lead";
 import { loadSchoolCatalog } from "@/lib/schools/public";
-import { MAX_CHAT_MESSAGES_PER_CONVERSATION } from "@/lib/security/limits";
+import {
+  MAX_CHAT_MESSAGES_PER_CONVERSATION,
+  whatsappOutboundQuotaExceeded,
+} from "@/lib/security/limits";
+import { confirmWhatsAppBooking } from "./booking";
+import {
+  CHOOSE_ANOTHER_TIME_BUTTON_ID,
+  confirmBookingButtonId,
+  isAffirmativeConfirmation,
+  parseConfirmBookingButton,
+} from "./confirmation";
 import {
   attemptWhatsAppDeliveriesNow,
   drainDueWhatsAppDeliveries,
@@ -21,6 +33,11 @@ import {
   resolveInboundConversation,
 } from "./inbound";
 import {
+  getPendingBookingIntent,
+  getPendingBookingIntentById,
+  upsertPendingBookingIntent,
+} from "./intents";
+import {
   claimDueWhatsAppJobs,
   failJob,
   markJobDone,
@@ -34,6 +51,257 @@ import { splitWhatsAppText } from "./text";
 export const WHATSAPP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export type ProcessJobResult = "done" | "failed";
+
+type JobContext = {
+  schoolId: string;
+  conversationId: string;
+  purgeAt: Date;
+};
+
+type InboundContext = JobContext & {
+  message: InboundWhatsAppMessage;
+  runId: string;
+};
+
+async function sendNotice(ctx: InboundContext, text: string): Promise<void> {
+  const deliveryId = await enqueueWhatsAppDelivery({
+    schoolId: ctx.schoolId,
+    recipientWaId: ctx.message.waId,
+    phoneNumberId: ctx.message.phoneNumberId,
+    providerIdempotencyKey: `wa-notice/${ctx.message.waId}/${ctx.message.wamid}`,
+    body: text,
+    windowExpiresAt: addHours(new Date(), 24),
+  });
+  if (deliveryId) await attemptWhatsAppDeliveriesNow([deliveryId], ctx.runId);
+}
+
+/**
+ * Deterministic confirmation path (addendum "Deterministic confirmation"):
+ * recognize a `confirm_booking:<id>` reply button or an exact affirmative while
+ * a pending intent exists, and route those straight to `bookSlot` instead of
+ * the agent. Returns true when the inbound message was fully handled here.
+ */
+async function handleConfirmation(
+  ctx: InboundContext,
+  now: Date,
+): Promise<boolean> {
+  const inboundText = ctx.message.text ?? "";
+  const buttonIntentId = parseConfirmBookingButton(inboundText);
+  const pending = await getPendingBookingIntent(ctx.conversationId, now);
+
+  if (!buttonIntentId && !(pending && isAffirmativeConfirmation(inboundText))) {
+    return false;
+  }
+
+  const intent = buttonIntentId
+    ? await getPendingBookingIntentById(buttonIntentId, ctx.schoolId, now)
+    : pending;
+
+  // Book BEFORE persisting the user message so a crash/retry replays into the
+  // same deterministic idempotency key instead of silently dropping a confirm.
+  if (!intent) {
+    await persistUserMessage({
+      conversationId: ctx.conversationId,
+      messageId: ctx.message.wamid,
+      text: inboundText,
+      purgeAt: ctx.purgeAt,
+    });
+    await sendNotice(
+      ctx,
+      "That booking option has expired or was replaced. Please ask for available times again.",
+    );
+    return true;
+  }
+
+  await confirmWhatsAppBooking({
+    schoolId: ctx.schoolId,
+    conversationId: ctx.conversationId,
+    intent,
+    waId: ctx.message.waId,
+    phoneNumberId: ctx.message.phoneNumberId,
+    wamid: ctx.message.wamid,
+    profileName: ctx.message.profileName,
+    purgeAt: ctx.purgeAt,
+    runId: ctx.runId,
+  });
+
+  await persistUserMessage({
+    conversationId: ctx.conversationId,
+    messageId: ctx.message.wamid,
+    text: inboundText,
+    purgeAt: ctx.purgeAt,
+  });
+  return true;
+}
+
+async function enqueueAndSendTextReplies(
+  ctx: InboundContext,
+  text: string,
+  idempotencyPrefix: string,
+): Promise<void> {
+  const chunks = splitWhatsAppText(text);
+  const windowExpiresAt = addHours(new Date(), 24);
+  const deliveryIds: string[] = [];
+  for (let index = 0; index < chunks.length; index++) {
+    const deliveryId = await enqueueWhatsAppDelivery({
+      schoolId: ctx.schoolId,
+      recipientWaId: ctx.message.waId,
+      phoneNumberId: ctx.message.phoneNumberId,
+      providerIdempotencyKey: `${idempotencyPrefix}/${index}`,
+      body: chunks[index],
+      windowExpiresAt,
+    });
+    if (deliveryId) deliveryIds.push(deliveryId);
+  }
+  if (deliveryIds.length > 0) {
+    await attemptWhatsAppDeliveriesNow(deliveryIds, ctx.runId);
+  }
+}
+
+/**
+ * Agent turn: run the agent to completion, then persist messages and either
+ * (a) refresh the pending booking intent + send the interactive confirmation,
+ * (b) write a lead (platform), or (c) send the plain text reply.
+ */
+async function handleAgentTurn(ctx: InboundContext, now: Date): Promise<void> {
+  const history = await loadValidatedConversationMessages(ctx.conversationId);
+  if (history.length >= MAX_CHAT_MESSAGES_PER_CONVERSATION) return;
+
+  // 429-equivalent: per-wa_id daily outbound cap (Phase 5 abuse controls).
+  if (
+    await whatsappOutboundQuotaExceeded(ctx.schoolId, ctx.message.waId, now)
+  ) {
+    await persistUserMessage({
+      conversationId: ctx.conversationId,
+      messageId: ctx.message.wamid,
+      text: ctx.message.text ?? "",
+      purgeAt: ctx.purgeAt,
+    });
+    await sendNotice(
+      ctx,
+      "You've reached today's message limit. Please try again tomorrow.",
+    );
+    return;
+  }
+
+  const inboundUIMessage: UIMessage = {
+    id: ctx.message.wamid,
+    role: "user",
+    parts: [{ type: "text", text: ctx.message.text ?? "" }],
+  };
+  const uiMessages = await validateUIMessages({
+    messages: [...history, inboundUIMessage],
+  });
+
+  const catalog = await loadSchoolCatalog(ctx.schoolId);
+  const db = getDb();
+  const [school] = await db
+    .select()
+    .from(schools)
+    .where(eq(schools.id, ctx.schoolId))
+    .limit(1);
+  if (!school) throw new Error("school_missing");
+
+  const run = await runBookingAgentToCompletion({
+    school,
+    offerings: catalog.offerings,
+    windows: catalog.windows,
+    occurrences: catalog.occurrences,
+    faqs: catalog.faqs,
+    uiMessages,
+    now,
+  });
+
+  await persistUserMessage({
+    conversationId: ctx.conversationId,
+    messageId: ctx.message.wamid,
+    text: ctx.message.text ?? "",
+    purgeAt: ctx.purgeAt,
+  });
+
+  const windowExpiresAt = addHours(now, 24);
+
+  // Booking intent: platform persists/refreshes the pending intent and asks for
+  // confirmation via reply buttons. The agent still never writes the booking.
+  if (run.prepareBooking) {
+    const intent = await upsertPendingBookingIntent({
+      schoolId: ctx.schoolId,
+      conversationId: ctx.conversationId,
+      offeringId: run.prepareBooking.offeringId,
+      slotId: run.prepareBooking.slotId,
+      participantName: run.prepareBooking.participantName,
+      participantAge: run.prepareBooking.participantAge,
+      now,
+    });
+
+    const body =
+      run.text ||
+      "I found a time that works. Use the buttons below to confirm.";
+    await persistAssistantMessage({
+      conversationId: ctx.conversationId,
+      messageId: generateId(),
+      parts: body ? [{ type: "text", text: body }] : [],
+      purgeAt: ctx.purgeAt,
+    });
+
+    const deliveryId = await enqueueWhatsAppDelivery({
+      schoolId: ctx.schoolId,
+      recipientWaId: ctx.message.waId,
+      phoneNumberId: ctx.message.phoneNumberId,
+      providerIdempotencyKey: `wa-confirm/${intent.id}`,
+      body,
+      interactiveButtons: [
+        { id: confirmBookingButtonId(intent.id), title: "Confirm booking" },
+        { id: CHOOSE_ANOTHER_TIME_BUTTON_ID, title: "Choose another time" },
+      ],
+      windowExpiresAt,
+    });
+    if (deliveryId) {
+      await attemptWhatsAppDeliveriesNow([deliveryId], ctx.runId);
+    }
+    return;
+  }
+
+  // Lead: platform writes it (shared create-lead). Owner delivery stays email.
+  if (run.lead) {
+    const lead = await createLead({
+      school,
+      contact: {
+        name: run.lead.participantName ?? ctx.message.profileName ?? "Guest",
+        email: null,
+        phone: ctx.message.waId,
+      },
+      source: { channel: "whatsapp", waId: ctx.message.waId },
+      participantName: run.lead.participantName,
+      participantAge: run.lead.participantAge,
+      offeringId: run.lead.offeringId,
+      statedNeed: run.lead.statedNeed,
+    });
+    await attemptPendingForLead(lead.id);
+
+    const replyText =
+      run.text ||
+      "Thanks — I've passed your details along and the school will contact you to find a time.";
+    await persistAssistantMessage({
+      conversationId: ctx.conversationId,
+      messageId: generateId(),
+      parts: [{ type: "text", text: replyText }],
+      purgeAt: ctx.purgeAt,
+    });
+    await enqueueAndSendTextReplies(ctx, replyText, `wa-reply/${lead.id}`);
+    return;
+  }
+
+  // Plain text reply.
+  const replyText = run.text;
+  await persistAssistantMessage({
+    conversationId: ctx.conversationId,
+    messageId: generateId(),
+    parts: replyText ? [{ type: "text", text: replyText }] : [],
+    purgeAt: ctx.purgeAt,
+  });
+  await enqueueAndSendTextReplies(ctx, replyText, `wa-reply/${generateId()}`);
+}
 
 /**
  * Claim-then-process one inbound job. The webhook never runs this — it only
@@ -61,7 +329,7 @@ export async function processWhatsAppJob(
     const now = new Date();
 
     // Retry idempotency: if a previous attempt already persisted this inbound
-    // message, do not run the agent a second time.
+    // message, do not run the agent or book a second time.
     if (await messageExists(conversationId, message.wamid)) {
       await markJobDone(job.id, resolved.schoolId);
       return "done";
@@ -74,74 +342,17 @@ export async function processWhatsAppJob(
     }
 
     try {
-      const history = await loadValidatedConversationMessages(conversationId);
-      if (history.length >= MAX_CHAT_MESSAGES_PER_CONVERSATION) {
-        await markJobDone(job.id, resolved.schoolId);
-        return "done";
-      }
-
-      const inboundUIMessage: UIMessage = {
-        id: message.wamid,
-        role: "user",
-        parts: [{ type: "text", text: message.text ?? "" }],
+      const ctx: InboundContext = {
+        schoolId: resolved.schoolId,
+        conversationId,
+        purgeAt: resolved.purgeAt,
+        message,
+        runId,
       };
-      const uiMessages = await validateUIMessages({
-        messages: [...history, inboundUIMessage],
-      });
 
-      const catalog = await loadSchoolCatalog(resolved.schoolId);
-      const db = getDb();
-      const [school] = await db
-        .select()
-        .from(schools)
-        .where(eq(schools.id, resolved.schoolId))
-        .limit(1);
-      if (!school) throw new Error("school_missing");
-
-      const run = await runBookingAgentToCompletion({
-        school,
-        offerings: catalog.offerings,
-        windows: catalog.windows,
-        occurrences: catalog.occurrences,
-        faqs: catalog.faqs,
-        uiMessages,
-        now,
-      });
-
-      await persistUserMessage({
-        conversationId,
-        messageId: message.wamid,
-        text: message.text ?? "",
-        purgeAt: resolved.purgeAt,
-      });
-
-      const replyText = run;
-      const assistantMessageId = generateId();
-      await persistAssistantMessage({
-        conversationId,
-        messageId: assistantMessageId,
-        parts: replyText ? [{ type: "text", text: replyText }] : [],
-        purgeAt: resolved.purgeAt,
-      });
-
-      // Inline send on inbound completion (decision H): the 24h window is open
-      // by definition right after an inbound message.
-      const chunks = splitWhatsAppText(replyText);
-      const windowExpiresAt = addHours(now, 24);
-      const deliveryIds: string[] = [];
-      for (let index = 0; index < chunks.length; index++) {
-        const deliveryId = await enqueueWhatsAppDelivery({
-          schoolId: resolved.schoolId,
-          recipientWaId: message.waId,
-          phoneNumberId: message.phoneNumberId,
-          providerIdempotencyKey: `wa-reply/${assistantMessageId}/${index}`,
-          body: chunks[index],
-          windowExpiresAt,
-        });
-        if (deliveryId) deliveryIds.push(deliveryId);
-      }
-      if (deliveryIds.length > 0) {
-        await attemptWhatsAppDeliveriesNow(deliveryIds, runId);
+      const confirmed = await handleConfirmation(ctx, now);
+      if (!confirmed) {
+        await handleAgentTurn(ctx, now);
       }
 
       await markJobDone(job.id, resolved.schoolId);
