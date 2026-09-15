@@ -3,5 +3,5 @@ export default function PublicSchoolLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <div className="min-h-full bg-white text-zinc-950">{children}</div>;
+  return <div className="min-h-full bg-white text-page-950">{children}</div>;
 }

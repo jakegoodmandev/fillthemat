@@ -46,7 +46,7 @@ export function BrandingSection({
     : "#111111";
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="grid gap-6 xl:grid-cols-(--settings-page-columns)">
       <form
         ref={formRef}
         action={formAction}
@@ -96,7 +96,7 @@ export function BrandingSection({
                 placeholder="#1E3A8A…"
                 aria-describedby={`${hexId}-helper${colorError ? ` ${hexId}-error` : ""}`}
                 aria-invalid={colorError ? true : undefined}
-                className="font-mono uppercase"
+                variant="code"
               />
             </div>
             <p id={`${hexId}-helper`} className="text-xs text-muted-foreground">

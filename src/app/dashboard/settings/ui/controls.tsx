@@ -131,7 +131,7 @@ export function TextField({
   min,
   max,
   step,
-  className,
+  variant = "default",
 }: BaseFieldProps & {
   value: string;
   onValueChange: (value: string) => void;
@@ -145,7 +145,7 @@ export function TextField({
   min?: number;
   max?: number;
   step?: number;
-  className?: string;
+  variant?: "default" | "code" | "uppercase";
 }) {
   const { controlId, helperId, errorId } = useFieldIds(name);
   return (
@@ -182,7 +182,7 @@ export function TextField({
         aria-describedby={describedBy(helperId, helper, errorId, error)}
         aria-invalid={error ? true : undefined}
         aria-required={required || undefined}
-        className={className}
+        variant={variant}
       />
     </FieldShell>
   );

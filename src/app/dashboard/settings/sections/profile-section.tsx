@@ -192,7 +192,7 @@ export function ProfileSection({
             error={errorFor("country")}
             helper="Two letters, such as US or CA."
             placeholder="US…"
-            className="uppercase"
+            variant="uppercase"
           />
         </div>
       </FieldGroup>

@@ -82,7 +82,7 @@ export function BookingFlow({
   }, [offeringId, age, slug, preview]);
 
   if (done) {
-    return <p className="rounded-2xl border border-zinc-200 p-4">{done}</p>;
+    return <p className="rounded-2xl border border-page-200 p-4">{done}</p>;
   }
 
   if (confirmation) {
@@ -120,12 +120,12 @@ export function BookingFlow({
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-4 text-sm">
+    <div className="flex flex-col gap-4 rounded-2xl border border-page-200 bg-white p-4 text-sm">
       <h2 className="text-base font-semibold">Book Trial</h2>
       <select
         value={offeringId}
         onChange={(event) => setOfferingId(event.target.value)}
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="rounded-md border border-page-300 px-3 py-2"
       >
         <option value="">Select a trial</option>
         {activeOfferings.map((offering) => (
@@ -138,7 +138,7 @@ export function BookingFlow({
         value={participantName}
         onChange={(event) => setParticipantName(event.target.value)}
         placeholder="Participant name"
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="rounded-md border border-page-300 px-3 py-2"
       />
       <input
         value={age}
@@ -147,13 +147,13 @@ export function BookingFlow({
         min={0}
         max={99}
         placeholder="Age in years"
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="rounded-md border border-page-300 px-3 py-2"
       />
       {slots.length > 0 ? (
         <select
           value={slotId}
           onChange={(event) => setSlotId(event.target.value)}
-          className="rounded-md border border-zinc-300 px-3 py-2"
+          className="rounded-md border border-page-300 px-3 py-2"
         >
           <option value="">Select a time</option>
           {slots.map((slot) => (
@@ -176,26 +176,26 @@ export function BookingFlow({
         value={contactName}
         onChange={(event) => setContactName(event.target.value)}
         placeholder="Adult contact name"
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="rounded-md border border-page-300 px-3 py-2"
       />
       <input
         value={contactEmail}
         onChange={(event) => setContactEmail(event.target.value)}
         type="email"
         placeholder="Email"
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="rounded-md border border-page-300 px-3 py-2"
       />
       <input
         value={contactPhone}
         onChange={(event) => setContactPhone(event.target.value)}
         placeholder="Phone"
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="rounded-md border border-page-300 px-3 py-2"
       />
       <button
         type="button"
         onClick={openConfirmation}
         disabled={!selected || !slotId || !participantName || age === ""}
-        className="h-11 rounded-full bg-zinc-950 text-white disabled:opacity-40"
+        className="h-11 rounded-full bg-page-950 text-white disabled:opacity-40"
       >
         Review booking
       </button>
@@ -237,7 +237,7 @@ function LeadForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="grid gap-2 rounded-xl bg-zinc-50 p-3">
+    <form onSubmit={onSubmit} className="grid gap-2 rounded-xl bg-page-50 p-3">
       <p>
         No matching trial time is open. Leave your details and the school will
         follow up.
@@ -247,7 +247,7 @@ function LeadForm({
         value={name}
         onChange={(event) => setName(event.target.value)}
         placeholder="Name"
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="rounded-md border border-page-300 px-3 py-2"
       />
       <input
         required
@@ -255,26 +255,26 @@ function LeadForm({
         value={email}
         onChange={(event) => setEmail(event.target.value)}
         placeholder="Email"
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="rounded-md border border-page-300 px-3 py-2"
       />
       <input
         required
         value={phone}
         onChange={(event) => setPhone(event.target.value)}
         placeholder="Phone"
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="rounded-md border border-page-300 px-3 py-2"
       />
       <textarea
         value={need}
         onChange={(event) => setNeed(event.target.value)}
         placeholder="What are you looking for?"
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="rounded-md border border-page-300 px-3 py-2"
       />
       {siteKey ? <Turnstile siteKey={siteKey} onSuccess={setToken} /> : null}
       <button
         type="submit"
         disabled={!token}
-        className="h-10 rounded-full bg-zinc-900 text-white disabled:opacity-40"
+        className="h-10 rounded-full bg-page-900 text-white disabled:opacity-40"
       >
         Contact me
       </button>
