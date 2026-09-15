@@ -46,7 +46,7 @@ export function AgentSection({
   });
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="grid gap-6 xl:grid-cols-(--settings-page-columns)">
       <form
         ref={formRef}
         action={formAction}

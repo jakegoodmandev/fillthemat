@@ -160,7 +160,7 @@ export function FaqsSection({ faqs }: { faqs: FaqItem[] }) {
                   <Button
                     type="button"
                     variant="link"
-                    className="h-auto px-0 text-left text-sm whitespace-normal"
+                    className="h-auto text-left whitespace-normal"
                     onClick={() => openAdd(question)}
                     disabled={editor.saving}
                   >

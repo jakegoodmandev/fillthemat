@@ -27,13 +27,13 @@ export function DevEmailAuth({ next = "/dashboard" }: { next?: string }) {
 
   return (
     <form
-      className="flex flex-col gap-3 rounded-xl border border-dashed border-zinc-700 p-4"
+      className="flex flex-col gap-3 rounded-xl border border-dashed border-page-700 p-4"
       onSubmit={(event) => {
         event.preventDefault();
         void submit("signin");
       }}
     >
-      <p className="text-xs uppercase tracking-wide text-zinc-500">
+      <p className="text-xs uppercase tracking-wide text-page-500">
         Local email auth
       </p>
       <label className="flex flex-col gap-1 text-sm">
@@ -43,7 +43,7 @@ export function DevEmailAuth({ next = "/dashboard" }: { next?: string }) {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           autoComplete="username"
-          className="rounded-md border border-zinc-700 bg-transparent px-3 py-2"
+          className="rounded-md border border-page-700 bg-transparent px-3 py-2"
         />
       </label>
       <label className="flex flex-col gap-1 text-sm">
@@ -53,10 +53,10 @@ export function DevEmailAuth({ next = "/dashboard" }: { next?: string }) {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
-          className="rounded-md border border-zinc-700 bg-transparent px-3 py-2"
+          className="rounded-md border border-page-700 bg-transparent px-3 py-2"
         />
       </label>
-      {error ? <p className="text-sm text-red-400">{error}</p> : null}
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <div className="flex gap-2">
         <button
           type="submit"
@@ -69,12 +69,12 @@ export function DevEmailAuth({ next = "/dashboard" }: { next?: string }) {
           type="button"
           disabled={pending}
           onClick={() => void submit("signup")}
-          className="inline-flex h-11 items-center justify-center rounded-full border border-zinc-600 px-5 text-sm disabled:opacity-60"
+          className="inline-flex h-11 items-center justify-center rounded-full border border-page-600 px-5 text-sm disabled:opacity-60"
         >
           Sign up
         </button>
       </div>
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-page-500">
         Seeded owner: owner@local.test / local-dev-password. Not shown in
         production builds.
       </p>

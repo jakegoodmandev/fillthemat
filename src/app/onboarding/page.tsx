@@ -20,12 +20,12 @@ export default async function OnboardingPage({
   return (
     <main className="mx-auto flex min-h-full w-full max-w-lg flex-col gap-6 px-6 py-16">
       <h1 className="text-3xl font-semibold">Create your school</h1>
-      <p className="text-sm text-zinc-400">
+      <p className="text-sm text-page-400">
         This creates an unpublished school. Publishing happens after approval
         and a completed preview.
       </p>
       {params.error ? (
-        <p className="text-sm text-red-400">
+        <p className="text-sm text-destructive">
           {params.error === "slug"
             ? "That public URL is taken."
             : "Check the form and try again."}
@@ -38,7 +38,7 @@ export default async function OnboardingPage({
             name="name"
             required
             maxLength={80}
-            className="rounded-md border border-zinc-700 bg-transparent px-3 py-2"
+            className="rounded-md border border-page-700 bg-transparent px-3 py-2"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -49,7 +49,7 @@ export default async function OnboardingPage({
             minLength={3}
             maxLength={48}
             placeholder="tiger-dojo"
-            className="rounded-md border border-zinc-700 bg-transparent px-3 py-2"
+            className="rounded-md border border-page-700 bg-transparent px-3 py-2"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -57,7 +57,7 @@ export default async function OnboardingPage({
           <select
             name="timezone"
             defaultValue="America/New_York"
-            className="rounded-md border border-zinc-700 bg-transparent px-3 py-2"
+            className="rounded-md border border-page-700 bg-transparent px-3 py-2"
           >
             {timezones.map((zone) => (
               <option key={zone} value={zone}>
@@ -71,7 +71,7 @@ export default async function OnboardingPage({
           <input
             name="city"
             maxLength={80}
-            className="rounded-md border border-zinc-700 bg-transparent px-3 py-2"
+            className="rounded-md border border-page-700 bg-transparent px-3 py-2"
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -81,7 +81,7 @@ export default async function OnboardingPage({
             type="email"
             required
             defaultValue={user.email}
-            className="rounded-md border border-zinc-700 bg-transparent px-3 py-2"
+            className="rounded-md border border-page-700 bg-transparent px-3 py-2"
           />
         </label>
         <button

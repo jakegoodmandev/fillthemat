@@ -122,6 +122,35 @@ html.dark {
   --radius-lg: 0.75rem;
 }
 
+/*
+  Public surface palette. Marketing, booking, and school-auth pages use a
+  fixed neutral ramp (mirrors Tailwind's zinc steps exactly) instead of the
+  dashboard's semantic tokens, so these stay independent of the dark theme.
+*/
+@theme {
+  --color-page-50: #fafafa;
+  --color-page-100: #f4f4f5;
+  --color-page-200: #e4e4e7;
+  --color-page-300: #d4d4d8;
+  --color-page-400: #a1a1aa;
+  --color-page-500: #71717a;
+  --color-page-600: #52525b;
+  --color-page-700: #3f3f46;
+  --color-page-800: #27272a;
+  --color-page-900: #18181b;
+  --color-page-950: #09090b;
+  --color-page-error: #dc2626;
+  --color-page-accent-default: #111111;
+
+  /* Scoped design values that were previously arbitrary classes. */
+  --tracking-eyebrow: 0.2em;
+  --text-metric: 1.75rem;
+  --text-metric-lg: 2rem;
+  --text-page-title: 1.375rem;
+  --container-preview-logo: 60%;
+  --settings-page-columns: minmax(0, 1fr) 18rem;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

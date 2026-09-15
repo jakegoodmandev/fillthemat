@@ -272,7 +272,7 @@ function MetricCell({
   return (
     <div className="flex min-w-0 flex-col gap-2 p-4 md:p-5">
       <p className="text-sm text-foreground">{label}</p>
-      <p className="text-[1.75rem] leading-none font-semibold tabular-nums md:text-[2rem]">
+      <p className="text-(length:--text-metric) leading-none font-semibold tabular-nums md:text-(length:--text-metric-lg)">
         {value}
       </p>
       <p className="text-xs leading-relaxed text-muted-foreground text-pretty md:text-sm">

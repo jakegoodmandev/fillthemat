@@ -111,10 +111,10 @@ export function BookingChat({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex min-h-[320px] flex-col rounded-2xl border border-zinc-200 bg-white">
+      <div className="flex min-h-80 flex-col rounded-2xl border border-page-200 bg-white">
         <div className="flex-1 space-y-3 overflow-y-auto p-4 text-sm">
           {welcomeMessage ? (
-            <p className="text-zinc-600">{welcomeMessage}</p>
+            <p className="text-page-600">{welcomeMessage}</p>
           ) : null}
           {messages.map((message) => (
             <div
@@ -131,10 +131,10 @@ export function BookingChat({
               ) : null}
             </div>
           ))}
-          {status === "streaming" ? <p className="text-zinc-400">…</p> : null}
+          {status === "streaming" ? <p className="text-page-400">…</p> : null}
         </div>
         <form
-          className="flex gap-2 border-t border-zinc-100 p-3"
+          className="flex gap-2 border-t border-page-100 p-3"
           onSubmit={(event) => {
             event.preventDefault();
             const form = event.currentTarget;
@@ -150,11 +150,11 @@ export function BookingChat({
           <input
             name="message"
             placeholder="Ask about classes or times"
-            className="flex-1 rounded-full border border-zinc-300 px-4 py-2 text-sm"
+            className="flex-1 rounded-full border border-page-300 px-4 py-2 text-sm"
           />
           <button
             type="submit"
-            className="rounded-full bg-zinc-950 px-4 text-sm text-white"
+            className="rounded-full bg-page-950 px-4 text-sm text-white"
           >
             Send
           </button>
@@ -163,7 +163,7 @@ export function BookingChat({
       <button
         type="button"
         onClick={() => setShowBook(true)}
-        className="h-12 rounded-full bg-zinc-950 text-white"
+        className="h-12 rounded-full bg-page-950 text-white"
       >
         Book Trial
       </button>

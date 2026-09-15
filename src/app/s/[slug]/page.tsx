@@ -29,13 +29,9 @@ export default async function PublicSchoolPage({
   const catalog = await loadSchoolCatalog(school.id);
   const location =
     [school.address, school.city].filter(Boolean).join(", ") || null;
-  const accent = school.primaryColor ?? "#111111";
 
   return (
-    <main
-      className="mx-auto flex min-h-full w-full max-w-lg flex-col gap-6 px-4 py-8"
-      style={{ ["--school-accent" as string]: accent }}
-    >
+    <main className="mx-auto flex min-h-full w-full max-w-lg flex-col gap-6 px-4 py-8">
       <LandingSession slug={school.slug} preview={isPreview || !published} />
       {school.logoUrl ? (
         // biome-ignore lint/performance/noImgElement: tenant logos are arbitrary HTTPS URLs
@@ -47,7 +43,7 @@ export default async function PublicSchoolPage({
       ) : null}
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">{school.name}</h1>
-        {location ? <p className="text-zinc-600">{location}</p> : null}
+        {location ? <p className="text-page-600">{location}</p> : null}
       </div>
       <BookingChat
         slug={school.slug}
