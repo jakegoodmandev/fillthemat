@@ -16,6 +16,7 @@ Short guide to what is current versus historical. Treat only the files below as 
 ## Decisions
 
 - `decisions/whatsapp-cron-after.md` — accepted: `after()` + typing indicator + Hobby-safe daily cron. Do not reopen unless production needs sub-daily retries.
+- `decisions/lint-policy.md` — accepted: `@shadcn/lint` policy on the Oxlint host — six rules, `no-restyle` error + layout/TableCell contract, `page-*` tokenization; promote the warn rules to `error` when adoption settles.
 
 ## Archive
 
