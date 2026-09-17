@@ -4,6 +4,17 @@ export const config: VercelConfig = {
   bunVersion: "1.4.x",
   buildCommand: "bun run build",
   framework: "nextjs",
+  // Playwright HTML reports live on GitHub Pages (`gh-pages`). Vercel must not
+  // build that branch: each report push is a full copy of the accumulated
+  // tree (~361MB and growing) and was the deployment-storage spike.
+  git: {
+    deploymentEnabled: {
+      "gh-pages": false,
+    },
+  },
+  // Belt-and-suspenders if a gh-pages deployment is created anyway (exit 0 =
+  // skip). See docs/decisions/vercel-gh-pages-deployments.md.
+  ignoreCommand: '[ "$VERCEL_GIT_COMMIT_REF" = "gh-pages" ]',
   crons: [
     { path: "/api/cron/maintenance", schedule: "0 14 * * *" },
     // Hobby-safe: Vercel's free tier only allows daily cron intervals. The
