@@ -34,7 +34,7 @@ export function whatsappSystemUserToken(): string | null {
 }
 
 export function whatsappApiVersion(): string {
-  return process.env.WHATSAPP_API_VERSION || "v23.0";
+  return process.env.WHATSAPP_API_VERSION || "v26.0";
 }
 
 export function whatsappGraphBase(): string {
